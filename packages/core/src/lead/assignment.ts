@@ -1,11 +1,11 @@
-import { Role } from '@lms/types'
-import type { Result } from '../types'
+import { Role } from "@lms/types";
+import type { Result } from "../types";
 
 type AssignmentContext = {
-  creatorId: string
-  creatorRole: Role
-  explicitAssigneeId?: string   // only provided by Sub Admin/Admin
-}
+  creatorId: string;
+  creatorRole: Role;
+  explicitAssigneeId?: string; // only provided by Sub Admin/Admin
+};
 
 // ─────────────────────────────────────────
 // Determine assignedToId at lead creation time
@@ -14,15 +14,13 @@ type AssignmentContext = {
 // SUB_ADMIN/ADMIN creates → use explicit assignee if provided,
 //                           otherwise assign to themselves
 // ─────────────────────────────────────────
-export function resolveAssigneeOnCreate(
-  context: AssignmentContext
-): string {
+export function resolveAssigneeOnCreate(context: AssignmentContext): string {
   if (context.creatorRole === Role.EMPLOYEE) {
-    return context.creatorId
+    return context.creatorId;
   }
 
   // Sub Admin or Admin — use explicit if provided, else self
-  return context.explicitAssigneeId ?? context.creatorId
+  return context.explicitAssigneeId ?? context.creatorId;
 }
 
 // ─────────────────────────────────────────
@@ -31,11 +29,10 @@ export function resolveAssigneeOnCreate(
 // already done in auth package before calling this
 // ─────────────────────────────────────────
 export function validateReassignment(params: {
-  newAssigneeId: string
-  newAssigneeRole: Role
-  leadStatus: string
+  newAssigneeId: string;
+  newAssigneeRole: Role;
+  leadStatus: string;
 }): Result<{ assignedToId: string }> {
-
   // Cannot assign to another Sub Admin or Admin
   // Leads are worked by employees
   if (
@@ -45,27 +42,56 @@ export function validateReassignment(params: {
     return {
       success: false,
       error: {
-        code: 'INVALID_ASSIGNMENT',
-        message: 'Leads can only be assigned to employees.',
+        code: "INVALID_ASSIGNMENT",
+        message: "Leads can only be assigned to employees.",
         meta: { newAssigneeRole: params.newAssigneeRole },
       },
-    }
+    };
   }
 
   // Cannot reassign a confirmed lead
-  if (params.leadStatus === 'CONFIRMED') {
+  if (params.leadStatus === "CONFIRMED") {
     return {
       success: false,
       error: {
-        code: 'ALREADY_CONFIRMED',
-        message: 'Confirmed leads cannot be reassigned.',
+        code: "ALREADY_CONFIRMED",
+        message: "Confirmed leads cannot be reassigned.",
         meta: { leadStatus: params.leadStatus },
       },
-    }
+    };
   }
 
   return {
     success: true,
     data: { assignedToId: params.newAssigneeId },
+  };
+}
+
+// ─────────────────────────────────────────
+// Handle user deactivation
+// Returns lead IDs that need to be unassigned
+// API layer updates them all to assignedToId = null
+// and creates audit log entries
+// ─────────────────────────────────────────
+export function resolveDeactivationUnassignment(params: {
+  deactivatedUserId: string;
+  assignedLeads: Array<{ id: string; status: string }>;
+}): {
+  leadIdsToUnassign: string[];
+  skippedLeadIds: string[]; // confirmed leads stay as-is
+} {
+  const leadIdsToUnassign: string[] = [];
+  const skippedLeadIds: string[] = [];
+
+  for (const lead of params.assignedLeads) {
+    // Confirmed leads keep their assignment record for history
+    // but are no longer actively worked — skip reassignment
+    if (lead.status === "CONFIRMED") {
+      skippedLeadIds.push(lead.id);
+      continue;
+    }
+    leadIdsToUnassign.push(lead.id);
   }
+
+  return { leadIdsToUnassign, skippedLeadIds };
 }

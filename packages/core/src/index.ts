@@ -30,6 +30,7 @@ export {
 export {
   resolveAssigneeOnCreate,
   validateReassignment,
+  resolveDeactivationUnassignment,
 } from "./lead/assignment";
 
 // Follow-up
@@ -37,6 +38,11 @@ export {
   detectOverdueFollowUps,
   buildFollowUpNotification,
 } from "./lead/followUp";
+
+export {
+  canEmployeeSeeConfirmedLead,
+  buildConfirmedByTag,
+} from "./lead/visibility";
 
 // Import
 export { processImportRows } from "./import/processor";

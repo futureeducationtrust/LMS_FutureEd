@@ -219,6 +219,10 @@ model Lead {
   duplicateOf   Lead?   @relation("Duplicates", fields: [duplicateOfId], references: [id])
   duplicates    Lead[]  @relation("Duplicates")
 
+  // Confirmation tracking
+  confirmedAt   DateTime?
+  confirmedById String?   // User.id of who confirmed it
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
