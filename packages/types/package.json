@@ -6,5 +6,8 @@
   "types": "./src/index.ts",
   "devDependencies": {
     "@lms/typescript-config": "workspace:^"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }

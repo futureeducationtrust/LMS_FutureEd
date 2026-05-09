@@ -15,9 +15,16 @@ import {
   ResetPasswordSchema,
 } from "@lms/types";
 import { validateBody } from "../../middleware/validate";
-import { z } from "zod";
 
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
+  const refreshCookieOptions = {
+    httpOnly: true,
+    secure: config.isProd,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60,
+  };
+
   // ── POST /api/v1/auth/login ──
   fastify.post(
     "/login",
@@ -65,11 +72,16 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
+      reply.setCookie(
+        "refreshToken",
+        result.refreshToken,
+        refreshCookieOptions,
+      );
+
       return reply.status(200).send({
         success: true,
         data: {
           accessToken: result.accessToken,
-          refreshToken: result.refreshToken,
           user: result.user,
         },
       });
@@ -78,12 +90,16 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   // ── POST /api/v1/auth/refresh ──
   fastify.post("/refresh", async (request, reply) => {
-    const RefreshSchema = z.object({ refreshToken: z.string().min(1) });
-    const validation = validateBody(RefreshSchema, request.body);
-    if (!validation.success) {
-      return reply.status(400).send({ success: false, ...validation.error });
+    const refreshToken = request.cookies.refreshToken;
+    if (!refreshToken) {
+      return reply.status(401).send({
+        success: false,
+        error: {
+          code: "INVALID_TOKEN",
+          message: "Session expired. Please login again.",
+        },
+      });
     }
-    const { refreshToken } = validation.data;
 
     const result = await refreshAccessToken({
       rawRefreshToken: refreshToken,
@@ -92,6 +108,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     });
 
     if ("error" in result) {
+      reply.clearCookie("refreshToken", { path: "/" });
       return reply.status(401).send({
         success: false,
         error: {
@@ -101,11 +118,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
+    reply.setCookie("refreshToken", result.refreshToken, refreshCookieOptions);
+
     return reply.status(200).send({
       success: true,
       data: {
         accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
       },
     });
   });
@@ -117,11 +135,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       preHandler: authenticate,
     },
     async (request, reply) => {
-      const RefreshOptional = z.object({ refreshToken: z.string().optional() });
-      const validation = validateBody(RefreshOptional, request.body);
-      const { refreshToken } = validation.success
-        ? validation.data
-        : { refreshToken: undefined };
+      const refreshToken = request.cookies.refreshToken;
 
       if (refreshToken) {
         await logoutUser({
@@ -131,6 +145,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           redis: fastify.redis,
         });
       }
+
+      reply.clearCookie("refreshToken", { path: "/" });
 
       return reply.status(200).send({ success: true, data: null });
     },

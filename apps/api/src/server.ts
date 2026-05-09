@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import helmet from "@fastify/helmet";
+import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
@@ -27,6 +28,10 @@ export async function buildServer() {
   // ── Security ──
   await fastify.register(helmet, {
     contentSecurityPolicy: false, // handled by frontend
+  });
+
+  await fastify.register(cookie , {
+    secret: config.jwtSecret,
   });
 
   await fastify.register(cors, {
