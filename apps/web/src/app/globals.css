@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand colors */
+  --color-primary: #005826;
+  --color-primary-50: #f0f9f4;
+  --color-primary-100: #dcf0e5;
+  --color-primary-200: #bbe1ce;
+  --color-primary-300: #8acaab;
+  --color-primary-400: #54ac84;
+  --color-primary-500: #308f63;
+  --color-primary-600: #1f7350;
+  --color-primary-700: #005826;
+  --color-primary-800: #1a4a35;
+  --color-primary-900: #173d2d;
+  --color-primary-950: #0a2219;
+  --color-primary-foreground: #ffffff;
+
+  /* Surface grays */
+  --color-surface: #ffffff;
+  --color-surface-50: #f8fafc;
+  --color-surface-100: #f1f5f9;
+  --color-surface-200: #e2e8f0;
+  --color-surface-300: #cbd5e1;
+
+  /* Shadcn/ui semantic tokens */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222.2 84% 4.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222.2 84% 4.9%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(222.2 84% 4.9%);
+  --color-secondary: hsl(210 40% 96.1%);
+  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-muted: hsl(210 40% 96.1%);
+  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+  --color-accent: hsl(210 40% 96.1%);
+  --color-accent-foreground: hsl(222.2 47.4% 11.2%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(214.3 31.8% 91.4%);
+  --color-input: hsl(214.3 31.8% 91.4%);
+  --color-ring: hsl(152 100% 17%);
+
+  /* Border radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+
+  /* Fonts */
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background-color: var(--color-surface-100); }
+::-webkit-scrollbar-thumb { background-color: var(--color-surface-300); border-radius: 9999px; }
