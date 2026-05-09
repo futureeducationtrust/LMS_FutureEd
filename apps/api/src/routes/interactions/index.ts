@@ -2,7 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { canAddInteraction, canEditInteraction, canViewLead } from "@lms/auth";
-import { InteractionType, Role } from "@lms/types";
+import {
+  InteractionType,
+  Role,
+  CreateInteractionSchema,
+  EditInteractionSchema,
+} from "@lms/types";
+import { validateBody } from "../../middleware/validate";
 import { dispatchInteractionNotification } from "../../services/notifications";
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -136,24 +142,11 @@ export async function interactionRoutes(
       const { leadId } = request.params as { leadId: string };
       const { id: userId, role } = request.user;
 
-      const body = request.body as {
-        type: InteractionType;
-        note?: string;
-        callRecordingUrl?: string;
-        callDurationSecs?: number;
-        callDirection?: string;
-        isDuplicateDetected?: boolean; // tags note as duplicate detection
-      };
-
-      if (!body.type) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: "INVALID_INPUT",
-            message: "Interaction type is required",
-          },
-        });
+      const validation = validateBody(CreateInteractionSchema, request.body);
+      if (!validation.success) {
+        return reply.status(400).send({ success: false, ...validation.error });
       }
+      const body = validation.data;
 
       // Fetch lead with full context
       const lead = await fastify.prisma.lead.findUnique({
@@ -266,14 +259,11 @@ export async function interactionRoutes(
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const { id: userId } = request.user;
-      const { note } = request.body as { note?: string };
-
-      if (!note?.trim()) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: "INVALID_INPUT", message: "Note content is required" },
-        });
+      const validation = validateBody(EditInteractionSchema, request.body);
+      if (!validation.success) {
+        return reply.status(400).send({ success: false, ...validation.error });
       }
+      const { note } = validation.data;
 
       const interaction = await fastify.prisma.interactionLog.findUnique({
         where: { id },

@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
 import { canUpdateLead } from "@lms/auth";
-import { Role } from "@lms/types";
+import { Role, UpdateLeadSchema } from "@lms/types";
+import { validateBody } from "../../middleware/validate";
 
 export async function updateLeadRoute(fastify: FastifyInstance): Promise<void> {
   fastify.patch(
@@ -49,7 +50,11 @@ export async function updateLeadRoute(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      const body = request.body as Record<string, unknown>;
+      const validation = validateBody(UpdateLeadSchema, request.body);
+      if (!validation.success) {
+        return reply.status(400).send({ success: false, ...validation.error });
+      }
+      const body = validation.data;
 
       // Strip fields that cannot be updated via this endpoint
       const {
@@ -63,7 +68,7 @@ export async function updateLeadRoute(fastify: FastifyInstance): Promise<void> {
         confirmedAt: _conf,
         confirmedById: _confBy,
         ...updateData
-      } = body;
+      } = body as Record<string, unknown>;
 
       const updated = await fastify.prisma.$transaction(async (tx) => {
         const updatedLead = await tx.lead.update({

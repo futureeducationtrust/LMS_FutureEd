@@ -9,6 +9,13 @@ import {
   resetPasswordWithToken,
 } from "./service";
 import { authenticate } from "../../middleware/authenticate";
+import {
+  LoginSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+} from "@lms/types";
+import { validateBody } from "../../middleware/validate";
+import { z } from "zod";
 
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   // ── POST /api/v1/auth/login ──
@@ -30,20 +37,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (request, reply) => {
-      const { email, password } = request.body as {
-        email: string;
-        password: string;
-      };
-
-      if (!email || !password) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: "INVALID_INPUT",
-            message: "Email and password required",
-          },
-        });
+      const validation = validateBody(LoginSchema, request.body);
+      if (!validation.success) {
+        return reply.status(400).send({ success: false, ...validation.error });
       }
+      const { email, password } = validation.data;
 
       const deviceInfo = request.headers["user-agent"];
 
@@ -80,14 +78,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   // ── POST /api/v1/auth/refresh ──
   fastify.post("/refresh", async (request, reply) => {
-    const { refreshToken } = request.body as { refreshToken?: string };
-
-    if (!refreshToken) {
-      return reply.status(400).send({
-        success: false,
-        error: { code: "INVALID_INPUT", message: "Refresh token required" },
-      });
+    const RefreshSchema = z.object({ refreshToken: z.string().min(1) });
+    const validation = validateBody(RefreshSchema, request.body);
+    if (!validation.success) {
+      return reply.status(400).send({ success: false, ...validation.error });
     }
+    const { refreshToken } = validation.data;
 
     const result = await refreshAccessToken({
       rawRefreshToken: refreshToken,
@@ -121,7 +117,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       preHandler: authenticate,
     },
     async (request, reply) => {
-      const { refreshToken } = request.body as { refreshToken?: string };
+      const RefreshOptional = z.object({ refreshToken: z.string().optional() });
+      const validation = validateBody(RefreshOptional, request.body);
+      const { refreshToken } = validation.success
+        ? validation.data
+        : { refreshToken: undefined };
 
       if (refreshToken) {
         await logoutUser({
@@ -162,14 +162,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       },
     },
     async (request, reply) => {
-      const { email } = request.body as { email?: string };
-
-      if (!email) {
-        return reply.status(400).send({
-          success: false,
-          error: { code: "INVALID_INPUT", message: "Email required" },
-        });
+      const validation = validateBody(ForgotPasswordSchema, request.body);
+      if (!validation.success) {
+        return reply.status(400).send({ success: false, ...validation.error });
       }
+      const { email } = validation.data;
 
       const user = await fastify.prisma.user.findUnique({
         where: { email: email.toLowerCase().trim() },
@@ -200,30 +197,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   // ── POST /api/v1/auth/reset-password ──
   fastify.post("/reset-password", async (request, reply) => {
-    const { token, newPassword } = request.body as {
-      token?: string;
-      newPassword?: string;
-    };
-
-    if (!token || !newPassword) {
-      return reply.status(400).send({
-        success: false,
-        error: {
-          code: "INVALID_INPUT",
-          message: "Token and new password required",
-        },
-      });
+    const validation = validateBody(ResetPasswordSchema, request.body);
+    if (!validation.success) {
+      return reply.status(400).send({ success: false, ...validation.error });
     }
-
-    if (newPassword.length < 8) {
-      return reply.status(400).send({
-        success: false,
-        error: {
-          code: "INVALID_INPUT",
-          message: "Password must be at least 8 characters",
-        },
-      });
-    }
+    const { token, newPassword } = validation.data;
 
     const result = await resetPasswordWithToken({
       rawToken: token,

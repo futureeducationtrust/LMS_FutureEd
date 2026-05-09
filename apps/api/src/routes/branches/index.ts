@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
-import { Role } from "@lms/types";
+import { Role, CreateBranchSchema, UpdateBranchSchema } from "@lms/types";
+import { validateBody } from "../../middleware/validate";
 
 export async function branchRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /branches — List all branches
@@ -31,21 +32,11 @@ export async function branchRoutes(fastify: FastifyInstance): Promise<void> {
       preHandler: [authenticate, authorize([Role.ADMIN])],
     },
     async (request, reply) => {
-      const body = request.body as {
-        name: string;
-        city: string;
-        address?: string;
-      };
-
-      if (!body.name || !body.city) {
-        return reply.status(400).send({
-          success: false,
-          error: {
-            code: "INVALID_INPUT",
-            message: "Name and city are required",
-          },
-        });
+      const validation = validateBody(CreateBranchSchema, request.body);
+      if (!validation.success) {
+        return reply.status(400).send({ success: false, ...validation.error });
       }
+      const body = validation.data;
 
       const branch = await fastify.prisma.branch.create({
         data: {
@@ -67,12 +58,11 @@ export async function branchRoutes(fastify: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const body = request.body as {
-        name?: string;
-        city?: string;
-        address?: string;
-        isActive?: boolean;
-      };
+      const validation2 = validateBody(UpdateBranchSchema, request.body);
+      if (!validation2.success) {
+        return reply.status(400).send({ success: false, ...validation2.error });
+      }
+      const body = validation2.data;
 
       const branch = await fastify.prisma.branch.findUnique({ where: { id } });
 
