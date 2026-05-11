@@ -17,7 +17,6 @@ type LoginResponse = {
       email: string;
       role: Role;
       branchId: string;
-      branch: { name: string; city: string };
     };
   };
 };
@@ -43,7 +42,7 @@ export function useLogin() {
           email: data.user.email,
           role: data.user.role,
           branchId: data.user.branchId,
-          branchName: data.user.branch.name,
+          branchName: "",
         },
         data.accessToken,
       );
@@ -103,6 +102,28 @@ export function useSetupPassword() {
     },
     onError: () => {
       toast.error("Setup link is invalid or expired. Contact your admin.");
+    },
+  });
+}
+
+// ── Logout mutation ──
+export function useLogout() {
+  const { clearAuth } = useAuthStore();
+  const router = useRouter();
+
+  return useMutation({
+    mutationFn: async () => {
+      await api.post("/auth/logout", {});
+    },
+    onSuccess: () => {
+      clearAuth();
+      toast.success("Logged out successfully");
+      router.replace("/login");
+    },
+    onError: () => {
+      // Clear auth state even if logout API fails
+      clearAuth();
+      router.replace("/login");
     },
   });
 }

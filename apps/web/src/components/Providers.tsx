@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { ConfigProvider } from "antd";
 import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "react-hot-toast";
+import { useAuthInit } from "@/hooks/useAuthInit";
 
 // Ant Design theme — override with brand colors
 const antTheme = {
@@ -19,6 +20,8 @@ const antTheme = {
 };
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  useAuthInit();
+
   return (
     <QueryClientProvider client={queryClient}>
       <ConfigProvider theme={antTheme}>{children}</ConfigProvider>

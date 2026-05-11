@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, AlertTriangle, Lock } from "lucide-react";
+import { isAxiosError } from "axios";
 import toast from "react-hot-toast";
 import { useLogin } from "@/hooks/useAuthMutations";
 import { useAuthStore } from "@/store/auth";
@@ -46,29 +47,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [attempts, setAttempts] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    try {
-      const data = getAttemptData();
-      const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
-      if (data.lastAttempt < fifteenMinsAgo) return 0;
-      return data.count;
-    } catch {
-      return 0;
-    }
-  });
+  // Initialize deterministically for SSR to avoid hydration mismatch.
+  // Populate from localStorage after mount.
+  const [attempts, setAttempts] = useState<number>(0);
+  const [isLockedOut, setIsLockedOut] = useState<boolean>(false);
 
-  const [isLockedOut, setIsLockedOut] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
+  useEffect(() => {
     try {
       const data = getAttemptData();
       const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
-      if (data.lastAttempt < fifteenMinsAgo) return false;
-      return data.count >= MAX_ATTEMPTS;
+      if (data.lastAttempt < fifteenMinsAgo) {
+        setAttempts(0);
+        setIsLockedOut(false);
+      } else {
+        setAttempts(data.count);
+        setIsLockedOut(data.count >= MAX_ATTEMPTS);
+      }
     } catch {
-      return false;
+      setAttempts(0);
+      setIsLockedOut(false);
     }
-  });
+  }, []);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -109,7 +108,13 @@ export default function LoginPage() {
     try {
       await login.mutateAsync({ email, password });
       clearAttemptData();
-    } catch {
+    } catch (error) {
+      // Count only credential/rate-limit failures toward lockout.
+      if (isAxiosError(error) && error.response?.status !== 401) {
+        toast.error("Unable to sign in right now. Please try again.");
+        return;
+      }
+
       const data = getAttemptData();
       const newCount = data.count + 1;
       saveAttemptData({ count: newCount, lastAttempt: Date.now() });

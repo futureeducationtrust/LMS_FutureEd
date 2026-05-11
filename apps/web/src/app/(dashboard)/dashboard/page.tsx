@@ -1,7 +1,16 @@
+"use client";
+
+import { useAuthStore } from "@/store/auth";
+import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
+import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
+import { Role } from "@lms/types";
+
 export default function DashboardPage() {
-  return (
-    <div className="flex items-center justify-center h-64">
-      <p className="text-gray-400 text-sm">Dashboard coming in Phase 18</p>
-    </div>
-  );
+  const { user } = useAuthStore();
+
+  if (!user) return null;
+
+  const isManager = user.role === Role.ADMIN || user.role === Role.SUB_ADMIN;
+
+  return isManager ? <AdminDashboard /> : <EmployeeDashboard />;
 }

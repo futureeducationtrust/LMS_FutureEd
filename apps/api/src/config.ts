@@ -39,7 +39,8 @@ export const config = {
   jwtRefreshExpiresIn: "7d",
 
   // CORS
-  corsOrigin: optionalEnv("CORS_ORIGIN", "*"),
+  // Default to localhost web origin in development to support credentials
+  corsOrigin: optionalEnv("CORS_ORIGIN", "http://localhost:3000"),
 
   // Cloudflare R2 — optional in development
   r2AccountId: optionalEnv("R2_ACCOUNT_ID", ""),

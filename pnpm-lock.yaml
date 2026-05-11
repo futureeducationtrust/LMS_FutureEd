@@ -123,6 +123,9 @@ importers:
       '@ant-design/icons':
         specifier: ^6.2.2
         version: 6.2.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@lms/auth':
+        specifier: workspace:^
+        version: link:../../packages/auth
       '@lms/types':
         specifier: workspace:^
         version: link:../../packages/types
@@ -144,6 +147,9 @@ importers:
       antd:
         specifier: ^6.3.7
         version: 6.3.7(luxon@3.7.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      apexcharts:
+        specifier: ^5.11.0
+        version: 5.11.0
       axios:
         specifier: ^1.16.0
         version: 1.16.0
@@ -168,6 +174,9 @@ importers:
       react:
         specifier: 19.2.4
         version: 19.2.4
+      react-apexcharts:
+        specifier: ^2.1.0
+        version: 2.1.0(apexcharts@5.11.0)(react@19.2.4)
       react-dom:
         specifier: 19.2.4
         version: 19.2.4(react@19.2.4)
@@ -2991,6 +3000,9 @@ packages:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
 
+  apexcharts@5.11.0:
+    resolution: {integrity: sha512-iIXnZ1DhndVgY4G5fmAbyUtGBTR5j4LlMEb561eAd4+wkJB7wJXXKLMr9u+4V5aQEPXeVYWgkAbuw9Y1z6MIrg==}
+
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
@@ -4491,6 +4503,7 @@ packages:
 
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
+    hasBin: true
 
   lru-cache@11.3.6:
     resolution: {integrity: sha512-Gf/KoL3C/MlI7Bt0PGI9I+TeTC/I6r/csU58N4BSNc4lppLBeKsOdFYkK+dX0ABDUMJNfCHTyPpzwwO21Awd3A==}
@@ -5060,6 +5073,12 @@ packages:
 
   rc9@3.0.1:
     resolution: {integrity: sha512-gMDyleLWVE+i6Sgtc0QbbY6pEKqYs97NGi6isHQPqYlLemPoO8dxQ3uGi0f4NiP98c+jMW6cG1Kx9dDwfvqARQ==}
+
+  react-apexcharts@2.1.0:
+    resolution: {integrity: sha512-xrmeTKRKHh3cvvLc8SasqFjlOgIqGpyHc81qjnRtcjUM0Fu7qEjgVRWGPokGFjqhwRZVgEym8zmuEyYr5LMYIg==}
+    peerDependencies:
+      apexcharts: '>=5.10.1'
+      react: '>=16.8.0'
 
   react-dom@19.2.4:
     resolution: {integrity: sha512-AXJdLo8kgMbimY95O2aKQqsz2iWi9jMgKJhRBAxECE4IFxfcazB2LmzloIoibJI3C12IlY20+KFaLv+71bUJeQ==}
@@ -9055,6 +9074,8 @@ snapshots:
       - luxon
       - moment
 
+  apexcharts@5.11.0: {}
+
   argparse@2.0.1: {}
 
   aria-hidden@1.2.6:
@@ -11365,6 +11386,12 @@ snapshots:
     dependencies:
       defu: 6.1.7
       destr: 2.0.5
+
+  react-apexcharts@2.1.0(apexcharts@5.11.0)(react@19.2.4):
+    dependencies:
+      apexcharts: 5.11.0
+      prop-types: 15.8.1
+      react: 19.2.4
 
   react-dom@19.2.4(react@19.2.4):
     dependencies:

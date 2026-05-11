@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth";
-import { useAuthInit } from "@/hooks/useAuthInit";
 import type { Role } from "@lms/types";
 
 type Props = {
@@ -13,8 +12,7 @@ type Props = {
 
 export function AuthGuard({ children, allowedRoles }: Props) {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
-  const { isLoading } = useAuthInit();
+  const { isAuthenticated, user, isLoading } = useAuthStore();
 
   useEffect(() => {
     if (isLoading) return;

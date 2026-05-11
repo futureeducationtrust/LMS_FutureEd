@@ -252,6 +252,62 @@ export async function analyticsRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  // GET /analytics/trend
+  fastify.get("/trend", { preHandler: guard }, async (request, reply) => {
+    const q = request.query as {
+      period?: string;
+      branchId?: string;
+    };
+
+    const days = q.period === "last90" ? 90 : q.period === "last30" ? 30 : 7;
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const branchFilter = q.branchId ? { branchId: q.branchId } : {};
+
+    const [created, confirmed] = await Promise.all([
+      fastify.prisma.lead.groupBy({
+        by: ["createdAt"],
+        where: { ...branchFilter, createdAt: { gte: from } },
+        _count: { _all: true },
+      }),
+      fastify.prisma.lead.groupBy({
+        by: ["confirmedAt"],
+        where: {
+          ...branchFilter,
+          status: "CONFIRMED",
+          confirmedAt: { gte: from },
+        },
+        _count: { _all: true },
+      }),
+    ]);
+
+    // Group by date string
+    const dateMap: Record<string, { created: number; confirmed: number }> = {};
+
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const key = d.toISOString().split("T")[0]!;
+      dateMap[key] = { created: 0, confirmed: 0 };
+    }
+
+    for (const row of created) {
+      const key = new Date(row.createdAt).toISOString().split("T")[0]!;
+      if (dateMap[key]) dateMap[key]!.created += row._count._all;
+    }
+
+    for (const row of confirmed) {
+      if (!row.confirmedAt) continue;
+      const key = new Date(row.confirmedAt).toISOString().split("T")[0]!;
+      if (dateMap[key]) dateMap[key]!.confirmed += row._count._all;
+    }
+
+    const trend = Object.entries(dateMap).map(([date, counts]) => ({
+      date,
+      ...counts,
+    }));
+
+    return reply.status(200).send({ success: true, data: { trend } });
+  });
+
   // ── GET /analytics/export/pdf/:type ──
   fastify.get(
     "/export/pdf/:type",

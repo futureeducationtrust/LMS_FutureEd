@@ -30,12 +30,24 @@ export async function buildServer() {
     contentSecurityPolicy: false, // handled by frontend
   });
 
-  await fastify.register(cookie , {
+  await fastify.register(cookie, {
     secret: config.jwtSecret,
   });
 
+  // Support a comma-separated list of allowed origins via CORS_ORIGIN
+  const allowedOrigins = (config.corsOrigin || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   await fastify.register(cors, {
-    origin: config.corsOrigin,
+    origin: function (origin, cb) {
+      // Allow non-browser (e.g., server-to-server) requests with no origin
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.length === 0)
+        return cb(new Error("CORS origin not configured"));
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   });
 

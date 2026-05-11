@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -13,81 +13,81 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  UserCircle,
-} from 'lucide-react'
-import { useAuthStore } from '@/store/auth'
-import { Role } from '@lms/types'
-import { cn } from '@/lib/utils'
+} from "lucide-react";
+import { useAuthStore } from "@/store/auth";
+import { useLogout } from "@/hooks/useAuthMutations";
+import { Role } from "@lms/types";
+import { cn } from "@/lib/utils";
 
 type NavItem = {
-  label: string
-  href: string
-  icon: React.ElementType
-  roles?: Role[]
-}
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  roles?: Role[];
+};
 
 const NAV_ITEMS: NavItem[] = [
   {
-    label: 'Dashboard',
-    href: '/dashboard',
+    label: "Dashboard",
+    href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    label: 'Leads',
-    href: '/leads',
+    label: "Leads",
+    href: "/leads",
     icon: Users,
   },
   {
-    label: 'Analytics',
-    href: '/analytics',
+    label: "Analytics",
+    href: "/analytics",
     icon: BarChart3,
     roles: [Role.ADMIN, Role.SUB_ADMIN],
   },
   {
-    label: 'Import',
-    href: '/import',
+    label: "Import",
+    href: "/import",
     icon: Upload,
     roles: [Role.ADMIN, Role.SUB_ADMIN],
   },
   {
-    label: 'Employees',
-    href: '/employees',
-    icon: UserCircle,
+    label: "Employees",
+    href: "/employees",
+    icon: Users,
     roles: [Role.ADMIN, Role.SUB_ADMIN],
   },
   {
-    label: 'Courses',
-    href: '/courses',
+    label: "Courses",
+    href: "/courses",
     icon: GraduationCap,
     roles: [Role.ADMIN, Role.SUB_ADMIN],
   },
   {
-    label: 'Settings',
-    href: '/settings',
+    label: "Settings",
+    href: "/settings",
     icon: Settings,
     roles: [Role.ADMIN],
   },
-]
+];
 
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false)
-  const pathname = usePathname()
-  const { user, clearAuth } = useAuthStore()
+  const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
+  const { user } = useAuthStore();
+  const logout = useLogout();
 
   const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.roles || (user && item.roles.includes(user.role))
-  )
+    (item) => !item.roles || (user && item.roles.includes(user.role)),
+  );
 
   function handleLogout() {
-    clearAuth()
-    window.location.href = '/login'
+    void logout.mutateAsync();
   }
 
   return (
     <aside
       className={cn(
-        'relative flex flex-col bg-white border-r border-surface-200 transition-all duration-300',
-        collapsed ? 'w-16' : 'w-60'
+        "relative flex flex-col bg-white border-r border-surface-200 transition-all duration-300",
+        collapsed ? "w-16" : "w-60",
       )}
     >
       {/* Logo */}
@@ -117,30 +117,30 @@ export function Sidebar() {
         {visibleItems.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== '/dashboard' && pathname.startsWith(item.href))
-          const Icon = item.icon
+            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const Icon = item.icon;
 
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 isActive
-                  ? 'bg-primary text-white'
-                  : 'text-gray-600 hover:bg-surface-100 hover:text-gray-900'
+                  ? "bg-primary text-white"
+                  : "text-gray-600 hover:bg-surface-100 hover:text-gray-900",
               )}
             >
               <Icon
                 size={18}
                 className={cn(
-                  'shrink-0',
-                  isActive ? 'text-white' : 'text-gray-400'
+                  "shrink-0",
+                  isActive ? "text-white" : "text-gray-400",
                 )}
               />
               {!collapsed && <span>{item.label}</span>}
             </Link>
-          )
+          );
         })}
       </nav>
 
@@ -158,7 +158,7 @@ export function Sidebar() {
                 {user?.name}
               </p>
               <p className="text-xs text-primary capitalize">
-                {user?.role?.toLowerCase().replace('_', ' ')}
+                {user?.role?.toLowerCase().replace("_", " ")}
               </p>
             </div>
           )}
@@ -184,5 +184,5 @@ export function Sidebar() {
         )}
       </button>
     </aside>
-  )
+  );
 }

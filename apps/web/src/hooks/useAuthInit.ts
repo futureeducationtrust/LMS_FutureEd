@@ -23,12 +23,13 @@ export function useAuthInit(): { isLoading: boolean } {
               email: string;
               role: Role;
               branchId: string;
-              branch: { name: string };
+              branch?: { name: string };
             };
           };
         }>("/auth/refresh");
 
         const { accessToken, user } = data.data;
+        const branchName = user.branch?.name ?? "";
 
         setAuth(
           {
@@ -37,13 +38,15 @@ export function useAuthInit(): { isLoading: boolean } {
             email: user.email,
             role: user.role,
             branchId: user.branchId,
-            branchName: user.branch?.name ?? "",
+            branchName,
           },
           accessToken,
         );
       } catch {
         // No valid cookie / session expired — user goes to login
         clearAuth();
+      } finally {
+        setLoading(false);
       }
     }
 
