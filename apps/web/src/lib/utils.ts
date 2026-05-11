@@ -1,8 +1,9 @@
-import { clsx, type ClassValue } from "clsx";
+import axios from "axios";
+import type { AxiosError } from "axios";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { AxiosError } from "axios";
 
 dayjs.extend(relativeTime);
 
@@ -10,83 +11,55 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/**
- * Format a date string or Date object to YYYY-MM-DD
- */
 export function formatDate(date: string | Date | null | undefined): string {
-  if (!date) return "";
-  return dayjs(date).format("YYYY-MM-DD");
+  if (!date) return "—";
+  return dayjs(date).format("D MMM YYYY");
 }
 
-/**
- * Format a datetime to "MMM DD, YYYY HH:mm"
- */
 export function formatDateTime(date: string | Date | null | undefined): string {
-  if (!date) return "";
-  return dayjs(date).format("MMM DD, YYYY HH:mm");
+  if (!date) return "—";
+  return dayjs(date).format("D MMM YYYY, h:mm A");
 }
 
-/**
- * Format a datetime to "MMM DD, YYYY HH:mm:ss"
- */
-export function formatDateTimeWithSeconds(
-  date: string | Date | null | undefined,
-): string {
-  if (!date) return "";
-  return dayjs(date).format("MMM DD, YYYY HH:mm:ss");
-}
-
-/**
- * Format a date relative to now (e.g., "2 hours ago", "in 3 days")
- */
 export function formatTimeAgo(date: string | Date | null | undefined): string {
-  if (!date) return "";
+  if (!date) return "—";
   return dayjs(date).fromNow();
 }
 
-/**
- * Format a number as Indian Rupees
- */
 export function formatCurrency(amount: number | null | undefined): string {
-  if (amount === null || amount === undefined) return "";
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    minimumFractionDigits: 0,
-  }).format(amount);
+  if (amount == null) return "—";
+  return `₹${amount.toLocaleString("en-IN")}`;
 }
 
-/**
- * Extract initials from a name (e.g., "John Doe" → "JD")
- */
-export function getInitials(name: string | null | undefined): string {
-  if (!name) return "?";
+export function getInitials(name: string): string {
   return name
     .split(" ")
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 }
 
-/**
- * Extract error message from Axios error or fallback to generic message
- */
-export function extractApiError(
-  error: unknown,
-  fallback = "An error occurred. Please try again.",
-): string {
-  if (error instanceof AxiosError) {
-    // Try to get nested error message from response.data.message
-    const message = (error.response?.data as Record<string, any>)?.message;
-    if (message) return message;
+type ApiErrorPayload = {
+  error?: { message?: string };
+};
 
-    // Fallback to error.message
-    if (error.message) return error.message;
+export function extractApiError(error: unknown): string {
+  if (axios.isAxiosError<ApiErrorPayload>(error)) {
+    return (
+      error.response?.data?.error?.message ??
+      error.message ??
+      "Something went wrong"
+    );
   }
 
-  if (error instanceof Error) {
-    return error.message;
-  }
+  if (error instanceof Error) return error.message;
+  return "Something went wrong";
+}
 
-  return fallback;
+export function formatPhoneNumber(phone: string): string {
+  if (phone.length === 10) {
+    return `+91 ${phone.slice(0, 5)} ${phone.slice(5)}`;
+  }
+  return phone;
 }

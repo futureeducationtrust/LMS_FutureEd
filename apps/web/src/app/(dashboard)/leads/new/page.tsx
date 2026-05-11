@@ -2,40 +2,66 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
-import { useCreateLead } from "@/hooks/useLeads";
-import { useCourses } from "@/hooks/useCourses";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
+import api from "@/lib/api";
+import { useNotifications } from "@/store/notifications";
+import { useQuery } from "@tanstack/react-query";
+import { extractApiError } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+
+const QUALIFICATIONS = [
+  "TENTH",
+  "TWELFTH",
+  "GRADUATION",
+  "POST_GRADUATION",
+  "OTHER",
+];
+const QUAL_LABELS: Record<string, string> = {
+  TENTH: "10th",
+  TWELFTH: "12th",
+  GRADUATION: "Graduation",
+  POST_GRADUATION: "Post Graduation",
+  OTHER: "Other",
+};
 
 export default function NewLeadPage() {
   const router = useRouter();
-  const { data: courses, isLoading: coursesLoading } = useCourses();
-  const createLead = useCreateLead();
+  const { success, error } = useNotifications();
+  const [loading, setLoading] = useState(false);
+  const [showCourse, setShowCourse] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [duplicateModal, setDuplicateModal] = useState<{
+    existingLeadId: string;
+    message: string;
+  } | null>(null);
+  const [revivalModal, setRevivalModal] = useState<{
+    lostLeadId: string;
+    message: string;
+  } | null>(null);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [formData, setFormData] = useState({
-    // Step 1
+  const [form, setForm] = useState({
     phone: "",
     studentName: "",
-    dobDay: "",
-    dobMonth: "",
-    dobYear: "",
+    dateOfBirth: "",
     fatherName: "",
-    // Step 2
     courseIds: [] as string[],
     sourceId: "",
-    otherSource: "",
-    // Step 3
+    sourceOther: "",
     qualification: "",
     schoolCollege: "",
-    board: "",
+    boardUniversity: "",
     passingYear: "",
-    marksPercentage: "",
-    address: "",
+    percentage: "",
+    village: "",
+    sector: "",
+    city: "",
+    district: "",
+    state: "",
     alternatePhone: "",
-    whatsappPhone: "",
+    whatsappNumber: "",
     email: "",
     nextFollowUpAt: "",
     sendEmail: false,
@@ -43,450 +69,474 @@ export default function NewLeadPage() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  if (coursesLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Spinner size="lg" label="Loading courses..." />
-      </div>
-    );
+  // Fetch courses and sources
+  const { data: courses } = useQuery({
+    queryKey: ["courses"],
+    queryFn: async () => {
+      const { data } = await api.get("/settings/courses");
+      return data.data as Array<{ id: string; name: string }>;
+    },
+  });
+
+  const { data: sources } = useQuery({
+    queryKey: ["lead-sources"],
+    queryFn: async () => {
+      const { data } = await api.get("/settings/sources");
+      return data.data as Array<{ id: string; name: string }>;
+    },
+  });
+
+  function set(field: string, value: unknown) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => {
+      const n = { ...prev };
+      delete n[field];
+      return n;
+    });
   }
 
-  function validateStep1(): boolean {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.phone) newErrors.phone = "Phone is required";
-    if (!/^\d{10}$/.test(formData.phone.replace(/\D/g, "")))
-      newErrors.phone = "Phone must be 10 digits";
-    if (!formData.studentName)
-      newErrors.studentName = "Student name is required";
-    if (!formData.dobDay || !formData.dobMonth || !formData.dobYear)
-      newErrors.dob = "Date of birth is required";
-    if (!formData.fatherName) newErrors.fatherName = "Father name is required";
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  function validate() {
+    const errs: Record<string, string> = {};
+    if (!form.phone.match(/^[6-9]\d{9}$/))
+      errs["phone"] = "Enter valid 10-digit Indian number";
+    if (!form.studentName.trim())
+      errs["studentName"] = "Student name is required";
+    if (!form.dateOfBirth) errs["dateOfBirth"] = "Date of birth is required";
+    if (!form.fatherName.trim()) errs["fatherName"] = "Father name is required";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent, revivalConfirm?: boolean) {
     e.preventDefault();
+    if (!validate()) return;
 
-    if (!validateStep1()) return;
-
+    setLoading(true);
     try {
-      const courseIds =
-        formData.courseIds.length > 0 ? formData.courseIds : [""];
-      const sourceId = formData.sourceId || "";
-
-      const leadData: Record<string, any> = {
-        phone: formData.phone,
-        studentName: formData.studentName,
-        dobDay: parseInt(formData.dobDay),
-        dobMonth: parseInt(formData.dobMonth),
-        dobYear: parseInt(formData.dobYear),
-        fatherName: formData.fatherName,
-        courseIds: courseIds,
-        sourceId: sourceId,
-        sendEmail: formData.sendEmail,
+      const payload: Record<string, unknown> = {
+        phone: form.phone,
+        studentName: form.studentName,
+        dateOfBirth: form.dateOfBirth,
+        fatherName: form.fatherName,
       };
+      if (form.courseIds.length) payload["courseIds"] = form.courseIds;
+      if (form.sourceId) payload["sourceId"] = form.sourceId;
+      if (form.sourceOther) payload["sourceOther"] = form.sourceOther;
+      if (form.qualification) payload["qualification"] = form.qualification;
+      if (form.schoolCollege) payload["schoolCollege"] = form.schoolCollege;
+      if (form.boardUniversity)
+        payload["boardUniversity"] = form.boardUniversity;
+      if (form.passingYear) payload["passingYear"] = Number(form.passingYear);
+      if (form.percentage) payload["percentage"] = Number(form.percentage);
+      if (form.village) payload["village"] = form.village;
+      if (form.sector) payload["sector"] = form.sector;
+      if (form.city) payload["city"] = form.city;
+      if (form.district) payload["district"] = form.district;
+      if (form.state) payload["state"] = form.state;
+      if (form.alternatePhone) payload["alternatePhone"] = form.alternatePhone;
+      if (form.whatsappNumber) payload["whatsappNumber"] = form.whatsappNumber;
+      if (form.email) payload["email"] = form.email;
+      if (form.nextFollowUpAt) payload["nextFollowUpAt"] = form.nextFollowUpAt;
+      payload["sendEmail"] = form.sendEmail;
+      if (revivalConfirm) payload["confirmRevival"] = true;
 
-      // Add optional fields only if they have values
-      if (formData.otherSource) leadData.otherSource = formData.otherSource;
-      if (formData.qualification)
-        leadData.qualification = formData.qualification;
-      if (formData.schoolCollege)
-        leadData.schoolCollege = formData.schoolCollege;
-      if (formData.board) leadData.board = formData.board;
-      if (formData.passingYear)
-        leadData.passingYear = parseInt(formData.passingYear);
-      if (formData.marksPercentage)
-        leadData.marksPercentage = parseInt(formData.marksPercentage);
-      if (formData.address) leadData.address = formData.address;
-      if (formData.alternatePhone)
-        leadData.alternatePhone = formData.alternatePhone;
-      if (formData.whatsappPhone)
-        leadData.whatsappPhone = formData.whatsappPhone;
-      if (formData.email) leadData.email = formData.email;
-      if (formData.nextFollowUpAt)
-        leadData.nextFollowUpAt = formData.nextFollowUpAt;
+      const { data } = await api.post("/leads", payload);
+      const result = data.data;
 
-      await createLead.mutateAsync(leadData as any);
+      if (result.requiresAction === "DUPLICATE_REDIRECTED") {
+        setDuplicateModal({
+          existingLeadId: result.existingLeadId,
+          message: result.message,
+        });
+        return;
+      }
 
-      router.push("/leads");
-    } catch {
-      // Error handling is in the mutation
+      if (result.requiresAction === "REVIVAL_CONFIRMATION") {
+        setRevivalModal({
+          lostLeadId: result.lostLeadId,
+          message: result.message,
+        });
+        return;
+      }
+
+      success("Lead created successfully");
+      router.push(`/leads/${result.lead.id}`);
+    } catch (e) {
+      error("Failed to create lead", extractApiError(e));
+    } finally {
+      setLoading(false);
     }
   }
 
-  return (
-    <div className="max-w-2xl">
-      {/* Header */}
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6"
-      >
-        <ArrowLeft size={14} />
-        Back
-      </button>
+  async function handleRevivalConfirm() {
+    setRevivalModal(null);
+    await handleSubmit({ preventDefault: () => {} } as React.FormEvent, true);
+  }
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Add New Lead</h1>
+  return (
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Add New Lead</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Enter student enquiry details
+          Fill in the student enquiry details
         </p>
       </div>
 
-      {/* Progress indicator */}
-      <div className="mb-8 flex gap-4">
-        {[1, 2, 3].map((s) => (
-          <div
-            key={s}
-            className={cn(
-              "h-1 flex-1 rounded-full transition-colors",
-              step >= s ? "bg-primary" : "bg-surface-200",
-            )}
+      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
+        {/* Step 1 — Required */}
+        <div className="bg-white border border-surface-200 rounded-xl p-5 space-y-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Basic Information *
+          </p>
+
+          <Input
+            label="Mobile Number"
+            required
+            placeholder="10-digit mobile number"
+            value={form.phone}
+            onChange={(e) => set("phone", e.target.value)}
+            error={errors["phone"]}
+            maxLength={10}
+            inputMode="numeric"
           />
-        ))}
-      </div>
+          <Input
+            label="Student Name"
+            required
+            placeholder="As per Matric record"
+            value={form.studentName}
+            onChange={(e) => set("studentName", e.target.value)}
+            error={errors["studentName"]}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Date of Birth"
+              required
+              type="date"
+              value={form.dateOfBirth}
+              onChange={(e) => set("dateOfBirth", e.target.value)}
+              error={errors["dateOfBirth"]}
+            />
+            <Input
+              label="Father's Name"
+              required
+              placeholder="Father's full name"
+              value={form.fatherName}
+              onChange={(e) => set("fatherName", e.target.value)}
+              error={errors["fatherName"]}
+            />
+          </div>
+        </div>
 
-      {/* Form */}
-      <div className="bg-white border border-surface-200 rounded-xl p-8">
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
-          {/* Step 1: Basic Info */}
-          {step === 1 && (
-            <>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Basic Information
-              </h2>
+        {/* Step 2 — Course info (collapsible) */}
+        <div className="bg-white border border-surface-200 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowCourse(!showCourse)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-surface-50 transition-colors"
+          >
+            <span className="text-sm font-semibold text-gray-700">
+              Course & Source Information
+            </span>
+            {showCourse ? (
+              <ChevronDown size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )}
+          </button>
 
-              <Input
-                label="Mobile Number"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData({ ...formData, phone: e.target.value })
-                }
-                error={errors.phone}
-                placeholder="9876543210"
-                required
-              />
-
-              <Input
-                label="Student Name"
-                value={formData.studentName}
-                onChange={(e) =>
-                  setFormData({ ...formData, studentName: e.target.value })
-                }
-                error={errors.studentName}
-                placeholder="John Doe"
-                required
-              />
-
-              <div className="grid grid-cols-3 gap-4">
-                <Input
-                  label="Day"
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={formData.dobDay}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dobDay: e.target.value })
-                  }
-                  placeholder="DD"
-                  required
-                />
-                <Input
-                  label="Month"
-                  type="number"
-                  min="1"
-                  max="12"
-                  value={formData.dobMonth}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dobMonth: e.target.value })
-                  }
-                  placeholder="MM"
-                  required
-                />
-                <Input
-                  label="Year"
-                  type="number"
-                  min="1980"
-                  max={new Date().getFullYear()}
-                  value={formData.dobYear}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dobYear: e.target.value })
-                  }
-                  placeholder="YYYY"
-                  required
-                />
-              </div>
-              {errors.dob && (
-                <p className="text-xs text-red-500">{errors.dob}</p>
-              )}
-
-              <Input
-                label="Father's Name"
-                value={formData.fatherName}
-                onChange={(e) =>
-                  setFormData({ ...formData, fatherName: e.target.value })
-                }
-                error={errors.fatherName}
-                placeholder="Father's full name"
-                required
-              />
-            </>
-          )}
-
-          {/* Step 2: Course & Source */}
-          {step === 2 && (
-            <>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Course & Source
-              </h2>
-
+          {showCourse && (
+            <div className="px-5 pb-5 space-y-4 border-t border-surface-100">
+              {/* Courses multi-select */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Interested Courses
                 </label>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                   {courses?.map((course) => (
                     <label
                       key={course.id}
-                      className="flex items-center gap-2 p-2 hover:bg-surface-50 rounded cursor-pointer"
+                      className={cn(
+                        "flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors",
+                        form.courseIds.includes(course.id)
+                          ? "border-primary bg-primary-50"
+                          : "border-surface-200 hover:border-primary-300",
+                      )}
                     >
                       <input
                         type="checkbox"
-                        checked={formData.courseIds.includes(course.id)}
+                        checked={form.courseIds.includes(course.id)}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setFormData({
-                              ...formData,
-                              courseIds: [...formData.courseIds, course.id],
-                            });
+                            set("courseIds", [...form.courseIds, course.id]);
                           } else {
-                            setFormData({
-                              ...formData,
-                              courseIds: formData.courseIds.filter(
-                                (id) => id !== course.id,
-                              ),
-                            });
+                            set(
+                              "courseIds",
+                              form.courseIds.filter((id) => id !== course.id),
+                            );
                           }
                         }}
-                        className="w-4 h-4 rounded"
+                        className="accent-primary"
                       />
-                      <span className="text-sm text-gray-700">
+                      <span className="text-xs text-gray-700">
                         {course.name}
-                        {course.code && (
-                          <span className="text-xs text-gray-500 ml-2">
-                            ({course.code})
-                          </span>
-                        )}
                       </span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <Input
-                label="Lead Source ID"
-                value={formData.sourceId}
-                onChange={(e) =>
-                  setFormData({ ...formData, sourceId: e.target.value })
-                }
-                placeholder="Select source"
-              />
+              {/* Source */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Lead Source
+                </label>
+                <select
+                  value={form.sourceId}
+                  onChange={(e) => set("sourceId", e.target.value)}
+                  aria-label="Lead source"
+                  title="Lead source"
+                  className="w-full px-3 py-2.5 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+                >
+                  <option value="">Select source type</option>
+                  {sources?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <Input
-                label="If Other, Specify"
-                value={formData.otherSource}
-                onChange={(e) =>
-                  setFormData({ ...formData, otherSource: e.target.value })
-                }
-                placeholder="Source details"
-              />
-            </>
+              {form.sourceId &&
+                sources?.find((s) => s.id === form.sourceId)?.name ===
+                  "Others" && (
+                  <Input
+                    label="Specify Source"
+                    placeholder="Describe the source"
+                    value={form.sourceOther}
+                    onChange={(e) => set("sourceOther", e.target.value)}
+                  />
+                )}
+            </div>
           )}
+        </div>
 
-          {/* Step 3: Additional Info */}
-          {step === 3 && (
-            <>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Additional Information
-              </h2>
+        {/* Step 3 — More info (collapsible) */}
+        <div className="bg-white border border-surface-200 rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowMore(!showMore)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-surface-50 transition-colors"
+          >
+            <span className="text-sm font-semibold text-gray-700">
+              Additional Student Information
+            </span>
+            {showMore ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
 
-              <Input
-                label="Qualification"
-                value={formData.qualification}
-                onChange={(e) =>
-                  setFormData({ ...formData, qualification: e.target.value })
-                }
-                placeholder="12th, Diploma, etc."
-              />
+          {showMore && (
+            <div className="px-5 pb-5 space-y-4 border-t border-surface-100">
+              {/* Qualification */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Qualification
+                </label>
+                <select
+                  value={form.qualification}
+                  onChange={(e) => set("qualification", e.target.value)}
+                  aria-label="Qualification"
+                  title="Qualification"
+                  className="w-full px-3 py-2.5 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+                >
+                  <option value="">Select qualification</option>
+                  {QUALIFICATIONS.map((q) => (
+                    <option key={q} value={q}>
+                      {QUAL_LABELS[q]}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <Input
-                label="School/College"
-                value={formData.schoolCollege}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    schoolCollege: e.target.value,
-                  })
-                }
-                placeholder="Institution name"
-              />
-
-              <Input
-                label="Board"
-                value={formData.board}
-                onChange={(e) =>
-                  setFormData({ ...formData, board: e.target.value })
-                }
-                placeholder="CBSE, ICSE, State, etc."
-              />
-
-              <Input
-                label="Passing Year"
-                type="number"
-                value={formData.passingYear}
-                onChange={(e) =>
-                  setFormData({ ...formData, passingYear: e.target.value })
-                }
-                placeholder="2024"
-              />
-
-              <Input
-                label="Marks %"
-                type="number"
-                value={formData.marksPercentage}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    marksPercentage: e.target.value,
-                  })
-                }
-                placeholder="85"
-              />
-
-              <Input
-                label="Address"
-                value={formData.address}
-                onChange={(e) =>
-                  setFormData({ ...formData, address: e.target.value })
-                }
-                placeholder="Full address"
-              />
-
-              <Input
-                label="Alternate Phone"
-                value={formData.alternatePhone}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    alternatePhone: e.target.value,
-                  })
-                }
-                placeholder="9876543210"
-              />
-
-              <Input
-                label="WhatsApp Number"
-                value={formData.whatsappPhone}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    whatsappPhone: e.target.value,
-                  })
-                }
-                placeholder="9876543210"
-              />
-
-              <Input
-                label="Email"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-                placeholder="student@email.com"
-              />
-
-              <Input
-                label="Next Follow-up Date"
-                type="datetime-local"
-                value={formData.nextFollowUpAt}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    nextFollowUpAt: e.target.value,
-                  })
-                }
-              />
-
-              <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.sendEmail}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      sendEmail: e.target.checked,
-                    })
-                  }
-                  className="w-4 h-4 rounded"
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="School/College"
+                  placeholder="Institution name"
+                  value={form.schoolCollege}
+                  onChange={(e) => set("schoolCollege", e.target.value)}
                 />
-                <span className="text-sm text-gray-700">
-                  Send welcome email
-                </span>
-              </label>
-            </>
+                <Input
+                  label="Board/University"
+                  placeholder="e.g. CBSE, JNU"
+                  value={form.boardUniversity}
+                  onChange={(e) => set("boardUniversity", e.target.value)}
+                />
+                <Input
+                  label="Passing Year"
+                  type="number"
+                  placeholder="e.g. 2023"
+                  value={form.passingYear}
+                  onChange={(e) => set("passingYear", e.target.value)}
+                />
+                <Input
+                  label="Percentage/Marks %"
+                  type="number"
+                  placeholder="e.g. 75"
+                  value={form.percentage}
+                  onChange={(e) => set("percentage", e.target.value)}
+                />
+              </div>
+
+              {/* Address */}
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">
+                Address
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Village/Quarter/Plot"
+                  value={form.village}
+                  onChange={(e) => set("village", e.target.value)}
+                />
+                <Input
+                  label="Sector/Colony/P.O."
+                  value={form.sector}
+                  onChange={(e) => set("sector", e.target.value)}
+                />
+                <Input
+                  label="City"
+                  value={form.city}
+                  onChange={(e) => set("city", e.target.value)}
+                />
+                <Input
+                  label="District"
+                  value={form.district}
+                  onChange={(e) => set("district", e.target.value)}
+                />
+                <Input
+                  label="State"
+                  value={form.state}
+                  onChange={(e) => set("state", e.target.value)}
+                />
+              </div>
+
+              {/* Contact */}
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">
+                Additional Contact
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Alternate Mobile"
+                  placeholder="10-digit number"
+                  value={form.alternatePhone}
+                  onChange={(e) => set("alternatePhone", e.target.value)}
+                  maxLength={10}
+                  inputMode="numeric"
+                />
+                <Input
+                  label="WhatsApp Number"
+                  placeholder="10-digit number"
+                  value={form.whatsappNumber}
+                  onChange={(e) => set("whatsappNumber", e.target.value)}
+                  maxLength={10}
+                  inputMode="numeric"
+                />
+                <Input
+                  label="Email ID"
+                  type="email"
+                  placeholder="student@email.com"
+                  value={form.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  className="col-span-2"
+                />
+              </div>
+            </div>
           )}
+        </div>
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-6 border-t border-surface-200">
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
-            >
-              Cancel
-            </button>
-
-            {step > 1 && (
-              <button
-                type="button"
-                onClick={() => setStep((s) => (s - 1) as any)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm"
-              >
-                Back
-              </button>
-            )}
-
-            {step < 3 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (step === 1 && validateStep1()) {
-                    setStep(2);
-                  } else if (step === 2) {
-                    setStep(3);
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-800 font-medium text-sm"
-              >
-                Next
-              </button>
-            )}
-
-            {step === 3 && (
-              <button
-                type="submit"
-                disabled={createLead.isPending}
-                className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-800 font-medium text-sm disabled:opacity-50"
-              >
-                {createLead.isPending ? "Creating..." : "Create Lead"}
-              </button>
-            )}
+        {/* Step 4 — Follow-up */}
+        <div className="bg-white border border-surface-200 rounded-xl p-5 space-y-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Follow-up
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Next Follow-up Date"
+              type="datetime-local"
+              value={form.nextFollowUpAt}
+              onChange={(e) => set("nextFollowUpAt", e.target.value)}
+            />
           </div>
-        </form>
-      </div>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.sendEmail}
+              onChange={(e) => set("sendEmail", e.target.checked)}
+              className="accent-primary w-4 h-4"
+            />
+            <span className="text-sm text-gray-700">
+              Send email notification to student
+            </span>
+          </label>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3 justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => router.back()}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            Create Lead
+          </Button>
+        </div>
+      </form>
+
+      {/* Duplicate modal */}
+      <Modal
+        open={!!duplicateModal}
+        onClose={() => setDuplicateModal(null)}
+        title="Duplicate Lead Detected"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDuplicateModal(null)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                router.push(`/leads/${duplicateModal?.existingLeadId}`);
+              }}
+            >
+              View Existing Lead
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">{duplicateModal?.message}</p>
+        <p className="text-sm text-gray-500 mt-2">
+          The new enquiry information has been added to the existing lead&apos;s
+          timeline.
+        </p>
+      </Modal>
+
+      {/* Revival modal */}
+      <Modal
+        open={!!revivalModal}
+        onClose={() => setRevivalModal(null)}
+        title="Previously Lost Lead"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRevivalModal(null)}>
+              No, Cancel
+            </Button>
+            <Button onClick={() => void handleRevivalConfirm()}>
+              Yes, Continue Follow-up
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-gray-600">{revivalModal?.message}</p>
+      </Modal>
     </div>
   );
 }

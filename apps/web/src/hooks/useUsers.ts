@@ -1,209 +1,111 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import type { Role } from "@lms/types";
-import toast from "react-hot-toast";
+import { useNotifications } from "@/store/notifications";
+import { extractApiError } from "@/lib/utils";
 
-export type User = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: Role;
-  branchId: string;
-  branch: { id: string; name: string };
-  isActive: boolean;
-  leadsCount: number;
-  confirmedCount: number;
-  createdAt: string;
-};
-
-export type UserFilters = {
-  page?: number;
-  pageSize?: number;
-  role?: Role | undefined;
+type UserFilters = {
+  role?: string | undefined;
   branchId?: string | undefined;
   isActive?: boolean | undefined;
   search?: string | undefined;
+  page?: number | undefined;
 };
 
-export type UserListResponse = {
-  users: User[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-};
-
-export type DeactivatePreviewResponse = {
-  affectedLeads: number;
-  affectedInteractions: number;
-  affectedAssignments: number;
-};
-
-// ── Get users list ──
-export function useUsers(filters?: UserFilters) {
+export function useUsers(filters: UserFilters = {}) {
   return useQuery({
     queryKey: ["users", filters],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (filters) {
-        Object.entries(filters).forEach(([k, v]) => {
-          if (v !== undefined && v !== "") params.set(k, String(v));
-        });
-      }
-      const { data } = await api.get<{ success: true; data: UserListResponse }>(
-        `/users?${params.toString()}`,
-      );
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined) params.set(k, String(v));
+      });
+      const { data } = await api.get(`/users?${params}`);
       return data.data;
     },
   });
 }
 
-// ── Get single user ──
-export function useUser(userId: string | null | undefined) {
+export function useUser(id: string) {
   return useQuery({
-    queryKey: ["users", userId],
+    queryKey: ["user", id],
     queryFn: async () => {
-      if (!userId) throw new Error("User ID is required");
-      const { data } = await api.get<{ success: true; data: User }>(
-        `/users/${userId}`,
-      );
+      const { data } = await api.get(`/users/${id}`);
       return data.data;
     },
-    enabled: !!userId,
+    enabled: !!id,
   });
 }
 
-// ── Create user ──
 export function useCreateUser() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: {
-      name: string;
-      email: string;
-      phone: string;
-      role: Role;
-      branchId: string;
-      sendSetupLink: boolean;
-    }) => {
-      const { data } = await api.post<{ success: true; data: User }>(
-        "/users",
-        params,
-      );
+    mutationFn: async (body: Record<string, unknown>) => {
+      const { data } = await api.post("/users", body);
       return data.data;
     },
     onSuccess: () => {
-      toast.success("User created successfully");
+      success("User created successfully");
       void qc.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: (error) => {
-      toast.error("Failed to create user");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to create user", extractApiError(e)),
   });
 }
 
-// ── Update user ──
-export function useUpdateUser(userId: string) {
-  const qc = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (params: {
-      name?: string;
-      phone?: string;
-      role?: Role;
-      branchId?: string;
-    }) => {
-      const { data } = await api.patch<{ success: true; data: User }>(
-        `/users/${userId}`,
-        params,
-      );
-      return data.data;
-    },
-    onSuccess: () => {
-      toast.success("User updated successfully");
-      void qc.invalidateQueries({ queryKey: ["users"] });
-      void qc.invalidateQueries({ queryKey: ["users", userId] });
-    },
-    onError: (error) => {
-      toast.error("Failed to update user");
-      console.error(error);
-    },
-  });
-}
-
-// ── Get deactivate preview (shows what will be affected) ──
-export function useDeactivatePreview(userId: string | null | undefined) {
+export function useDeactivatePreview(id: string) {
   return useQuery({
-    queryKey: ["users", userId, "deactivate-preview"],
+    queryKey: ["user-deactivate-preview", id],
     queryFn: async () => {
-      if (!userId) throw new Error("User ID is required");
-      const { data } = await api.get<{
-        success: true;
-        data: DeactivatePreviewResponse;
-      }>(`/users/${userId}/deactivate-preview`);
+      const { data } = await api.get(`/users/${id}/deactivate-preview`);
       return data.data;
     },
-    enabled: !!userId,
+    enabled: false, // manual trigger
   });
 }
 
-// ── Deactivate user ──
 export function useDeactivateUser() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (userId: string) => {
-      await api.post(`/users/${userId}/deactivate`, {});
+    mutationFn: async (id: string) => {
+      await api.post(`/users/${id}/deactivate`);
     },
     onSuccess: () => {
-      toast.success("User deactivated successfully");
+      success("User deactivated");
       void qc.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: (error) => {
-      toast.error("Failed to deactivate user");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to deactivate", extractApiError(e)),
   });
 }
 
-// ── Activate user ──
 export function useActivateUser() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (userId: string) => {
-      await api.post(`/users/${userId}/activate`, {});
+    mutationFn: async (id: string) => {
+      await api.post(`/users/${id}/activate`);
     },
     onSuccess: () => {
-      toast.success("User activated successfully");
+      success("User activated");
       void qc.invalidateQueries({ queryKey: ["users"] });
     },
-    onError: (error) => {
-      toast.error("Failed to activate user");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to activate", extractApiError(e)),
   });
 }
 
-// ── Reset password for user ──
-export function useResetPasswordForUser() {
-  const qc = useQueryClient();
-
+export function useResetUserPassword() {
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: { userId: string; sendResetLink: boolean }) => {
-      await api.post(`/users/${params.userId}/reset-password`, {
-        sendResetLink: params.sendResetLink,
-      });
+    mutationFn: async ({
+      id,
+      newPassword,
+    }: {
+      id: string;
+      newPassword: string;
+    }) => {
+      await api.post(`/users/${id}/reset-password`, { newPassword });
     },
-    onSuccess: () => {
-      toast.success("Password reset link sent");
-      void qc.invalidateQueries({ queryKey: ["users"] });
-    },
-    onError: (error) => {
-      toast.error("Failed to reset password");
-      console.error(error);
-    },
+    onSuccess: () => success("Password reset. Employee notified via email."),
+    onError: (e) => error("Failed to reset password", extractApiError(e)),
   });
 }

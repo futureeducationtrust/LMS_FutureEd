@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import bcrypt from "bcrypt";
 import { config } from "../../config";
 import {
   loginUser,
@@ -241,6 +242,52 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       data: { message: "Password updated successfully. Please login." },
     });
   });
+
+  fastify.post(
+    "/change-password",
+    {
+      preHandler: authenticate,
+    },
+    async (request, reply) => {
+      const { currentPassword, newPassword } = request.body as {
+        currentPassword: string;
+        newPassword: string;
+      };
+      const user = await fastify.prisma.user.findUnique({
+        where: { id: request.user.id },
+      });
+      if (!user)
+        return reply
+          .status(404)
+          .send({
+            success: false,
+            error: { code: "NOT_FOUND", message: "User not found" },
+          });
+
+      const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!valid)
+        return reply
+          .status(400)
+          .send({
+            success: false,
+            error: {
+              code: "INVALID_CREDENTIALS",
+              message: "Current password is incorrect",
+            },
+          });
+
+      const newHash = await bcrypt.hash(newPassword, 12);
+      await fastify.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: newHash },
+      });
+
+      return reply.send({
+        success: true,
+        data: { message: "Password changed successfully" },
+      });
+    },
+  );
 
   // ── POST /api/v1/auth/me ──
   // Get current user from token

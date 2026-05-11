@@ -8,6 +8,17 @@ export async function authenticate(
     await request.jwtVerify();
 
     const payload = request.user;
+    const userId =
+      (payload as { id?: string; sub?: string }).id ??
+      (payload as { sub?: string }).sub;
+    if (!userId) {
+      await reply.status(401).send({
+        success: false,
+        error: { code: "UNAUTHORIZED", message: "Authentication required" },
+      });
+      return;
+    }
+    (payload as { id: string }).id = userId;
 
     // Check if token is blacklisted (logout/deactivation)
     const jti = (payload as any).jti as string | undefined;
@@ -26,9 +37,7 @@ export async function authenticate(
     }
 
     // Check user-level logout (all devices)
-    const userLogout = await request.server.redis.get(
-      `user-logout:${payload.id}`,
-    );
+    const userLogout = await request.server.redis.get(`user-logout:${userId}`);
     if (userLogout) {
       await reply.status(401).send({
         success: false,

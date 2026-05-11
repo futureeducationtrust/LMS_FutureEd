@@ -26,6 +26,10 @@ type NavItem = {
   roles?: Role[];
 };
 
+type Props = {
+  onClose?: () => void;
+};
+
 const NAV_ITEMS: NavItem[] = [
   {
     label: "Dashboard",
@@ -69,7 +73,7 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onClose }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { user } = useAuthStore();
@@ -80,6 +84,7 @@ export function Sidebar() {
   );
 
   function handleLogout() {
+    onClose?.();
     void logout.mutateAsync();
   }
 
@@ -104,10 +109,10 @@ export function Sidebar() {
       </div>
 
       {/* Branch label */}
-      {!collapsed && user?.branchName && (
+      {!collapsed && user?.branch?.name && (
         <div className="px-4 py-2">
           <p className="text-xs text-gray-400 uppercase tracking-wide">
-            {user.branchName}
+            {user.branch.name}
           </p>
         </div>
       )}
@@ -124,6 +129,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              {...(onClose ? { onClick: onClose } : {})}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 isActive

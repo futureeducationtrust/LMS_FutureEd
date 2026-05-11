@@ -1,109 +1,85 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import { useNotifications } from "@/store/notifications";
+import { extractApiError } from "@/lib/utils";
 
-export type Course = {
-  id: string;
-  name: string;
-  code: string;
-  description?: string;
-  isActive: boolean;
-  createdAt: string;
-};
-
-export type CourseListResponse = {
-  courses: Course[];
-};
-
-// ── Get all courses ──
 export function useCourses() {
   return useQuery({
     queryKey: ["courses"],
     queryFn: async () => {
-      // First try /courses endpoint
-      try {
-        const { data } = await api.get<{
-          success: true;
-          data: CourseListResponse;
-        }>("/courses");
-        return data.data.courses;
-      } catch (error) {
-        // If no dedicated endpoint, return empty
-        console.warn("Courses endpoint not available");
-        return [];
-      }
-    },
-    staleTime: 10 * 60_000, // 10 minutes
-  });
-}
-
-// ── Get single course ──
-export function useCourse(courseId: string | null | undefined) {
-  return useQuery({
-    queryKey: ["courses", courseId],
-    queryFn: async () => {
-      if (!courseId) throw new Error("Course ID is required");
-      const { data } = await api.get<{ success: true; data: Course }>(
-        `/courses/${courseId}`,
-      );
+      const { data } = await api.get("/settings/courses");
       return data.data;
     },
-    enabled: !!courseId,
+    staleTime: 5 * 60_000,
   });
 }
 
-// ── Create course ──
 export function useCreateCourse() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: {
+    mutationFn: async (body: {
       name: string;
-      code: string;
+      code?: string;
       description?: string;
     }) => {
-      const { data } = await api.post<{ success: true; data: Course }>(
-        "/courses",
-        params,
-      );
+      const { data } = await api.post("/settings/courses", body);
       return data.data;
     },
     onSuccess: () => {
-      toast.success("Course created successfully");
+      success("Course created");
       void qc.invalidateQueries({ queryKey: ["courses"] });
     },
-    onError: (error) => {
-      toast.error("Failed to create course");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to create course", extractApiError(e)),
   });
 }
 
-// ── Update course ──
-export function useUpdateCourse(courseId: string) {
+export function useUpdateCourse() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: {
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
       name?: string;
-      code?: string;
-      description?: string;
       isActive?: boolean;
     }) => {
-      const { data } = await api.patch<{ success: true; data: Course }>(
-        `/courses/${courseId}`,
-        params,
-      );
+      const { data } = await api.patch(`/settings/courses/${id}`, body);
       return data.data;
     },
     onSuccess: () => {
-      toast.success("Course updated successfully");
+      success("Course updated");
       void qc.invalidateQueries({ queryKey: ["courses"] });
-      void qc.invalidateQueries({ queryKey: ["courses", courseId] });
     },
-    onError: (error) => {
-      toast.error("Failed to update course");
-      console.error(error);
+    onError: (e) => error("Failed to update", extractApiError(e)),
+  });
+}
+
+export function useLeadSources() {
+  return useQuery({
+    queryKey: ["lead-sources"],
+    queryFn: async () => {
+      const { data } = await api.get("/settings/sources");
+      return data.data;
     },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useCreateLeadSource() {
+  const qc = useQueryClient();
+  const { success, error } = useNotifications();
+  return useMutation({
+    mutationFn: async (body: { name: string }) => {
+      const { data } = await api.post("/settings/sources", body);
+      return data.data;
+    },
+    onSuccess: () => {
+      success("Source type created");
+      void qc.invalidateQueries({ queryKey: ["lead-sources"] });
+    },
+    onError: (e) => error("Failed to create", extractApiError(e)),
   });
 }

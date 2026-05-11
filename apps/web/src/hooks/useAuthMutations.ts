@@ -42,7 +42,6 @@ export function useLogin() {
           email: data.user.email,
           role: data.user.role,
           branchId: data.user.branchId,
-          branchName: "",
         },
         data.accessToken,
       );

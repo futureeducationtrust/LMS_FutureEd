@@ -1,50 +1,63 @@
-import { create } from 'zustand'
+import { create } from "zustand";
 
-export type Notification = {
-  id: string
-  message: string
-  type: 'info' | 'success' | 'warning' | 'error'
-  leadId?: string
-  createdAt: Date
-  isRead: boolean
-}
+export type ToastType = "success" | "error" | "warning" | "info";
+
+export type Toast = {
+  id: string;
+  type: ToastType;
+  title: string;
+  message?: string;
+};
 
 type NotificationState = {
-  notifications: Notification[]
-  unreadCount: number
-  addNotification: (n: Omit<Notification, 'id' | 'createdAt' | 'isRead'>) => void
-  markAllRead: () => void
-  markRead: (id: string) => void
-}
+  toasts: Toast[];
+  add: (toast: Omit<Toast, "id">) => void;
+  remove: (id: string) => void;
+  success: (title: string, message?: string) => void;
+  error: (title: string, message?: string) => void;
+  warning: (title: string, message?: string) => void;
+  info: (title: string, message?: string) => void;
+};
 
-export const useNotificationStore = create<NotificationState>((set) => ({
-  notifications: [],
-  unreadCount: 0,
+export const useNotifications = create<NotificationState>((set) => ({
+  toasts: [],
 
-  addNotification: (n) => {
-    const notification: Notification = {
-      ...n,
-      id: crypto.randomUUID(),
-      createdAt: new Date(),
-      isRead: false,
-    }
-    set((state) => ({
-      notifications: [notification, ...state.notifications].slice(0, 50),
-      unreadCount: state.unreadCount + 1,
-    }))
+  add: (toast) => {
+    const id = crypto.randomUUID();
+    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
+    setTimeout(() => {
+      set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+    }, 4000);
   },
 
-  markAllRead: () =>
-    set((state) => ({
-      notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
-      unreadCount: 0,
-    })),
+  remove: (id) =>
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 
-  markRead: (id) =>
-    set((state) => ({
-      notifications: state.notifications.map((n) =>
-        n.id === id ? { ...n, isRead: true } : n
-      ),
-      unreadCount: Math.max(0, state.unreadCount - 1),
-    })),
-}))
+  success: (title, message) =>
+    useNotifications.getState().add({
+      type: "success",
+      title,
+      ...(message ? { message } : {}),
+    }),
+
+  error: (title, message) =>
+    useNotifications.getState().add({
+      type: "error",
+      title,
+      ...(message ? { message } : {}),
+    }),
+
+  warning: (title, message) =>
+    useNotifications.getState().add({
+      type: "warning",
+      title,
+      ...(message ? { message } : {}),
+    }),
+
+  info: (title, message) =>
+    useNotifications.getState().add({
+      type: "info",
+      title,
+      ...(message ? { message } : {}),
+    }),
+}));

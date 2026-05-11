@@ -1,102 +1,60 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import { useNotifications } from "@/store/notifications";
+import { extractApiError } from "@/lib/utils";
 
-export type Branch = {
-  id: string;
-  name: string;
-  city: string;
-  address: string;
-  isActive: boolean;
-  createdAt: string;
-};
-
-export type BranchListResponse = {
-  branches: Branch[];
-};
-
-// ── Get all branches ──
 export function useBranches() {
   return useQuery({
     queryKey: ["branches"],
     queryFn: async () => {
-      const { data } = await api.get<{
-        success: true;
-        data: BranchListResponse;
-      }>("/branches");
+      const { data } = await api.get("/branches");
       return data.data.branches;
     },
-    staleTime: 5 * 60_000, // 5 minutes
+    staleTime: 5 * 60_000,
   });
 }
 
-// ── Get single branch ──
-export function useBranch(branchId: string | null | undefined) {
-  return useQuery({
-    queryKey: ["branches", branchId],
-    queryFn: async () => {
-      if (!branchId) throw new Error("Branch ID is required");
-      const { data } = await api.get<{ success: true; data: Branch }>(
-        `/branches/${branchId}`,
-      );
-      return data.data;
-    },
-    enabled: !!branchId,
-  });
-}
-
-// ── Create branch ──
 export function useCreateBranch() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: {
+    mutationFn: async (body: {
       name: string;
       city: string;
-      address: string;
+      address?: string;
     }) => {
-      const { data } = await api.post<{ success: true; data: Branch }>(
-        "/branches",
-        params,
-      );
+      const { data } = await api.post("/branches", body);
       return data.data;
     },
     onSuccess: () => {
-      toast.success("Branch created successfully");
+      success("Branch created");
       void qc.invalidateQueries({ queryKey: ["branches"] });
     },
-    onError: (error) => {
-      toast.error("Failed to create branch");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to create branch", extractApiError(e)),
   });
 }
 
-// ── Update branch ──
-export function useUpdateBranch(branchId: string) {
+export function useUpdateBranch() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: {
+    mutationFn: async ({
+      id,
+      ...body
+    }: {
+      id: string;
       name?: string;
       city?: string;
       address?: string;
       isActive?: boolean;
     }) => {
-      const { data } = await api.patch<{ success: true; data: Branch }>(
-        `/branches/${branchId}`,
-        params,
-      );
+      const { data } = await api.patch(`/branches/${id}`, body);
       return data.data;
     },
     onSuccess: () => {
-      toast.success("Branch updated successfully");
+      success("Branch updated");
       void qc.invalidateQueries({ queryKey: ["branches"] });
-      void qc.invalidateQueries({ queryKey: ["branches", branchId] });
     },
-    onError: (error) => {
-      toast.error("Failed to update branch");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to update", extractApiError(e)),
   });
 }

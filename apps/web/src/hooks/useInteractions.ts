@@ -1,111 +1,78 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
-import type { InteractionType, Role } from "@lms/types";
-import toast from "react-hot-toast";
+import { useNotifications } from "@/store/notifications";
+import { extractApiError } from "@/lib/utils";
 
-export type Interaction = {
-  id: string;
-  leadId: string;
-  type: InteractionType;
-  note: string;
-  recordingUrl?: string;
-  createdBy: {
-    id: string;
-    name: string;
-    email: string;
-    role: Role;
-  };
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type InteractionListResponse = {
-  interactions: Interaction[];
-  total: number;
-};
-
-// ── Get interactions for a lead ──
-export function useInteractions(leadId: string | null | undefined) {
+export function useInteractions(leadId: string) {
   return useQuery({
     queryKey: ["interactions", leadId],
     queryFn: async () => {
-      if (!leadId) throw new Error("Lead ID is required");
-      const { data } = await api.get<{
-        success: true;
-        data: InteractionListResponse;
-      }>(`/leads/${leadId}/interactions`);
+      const { data } = await api.get(`/leads/${leadId}/interactions`);
       return data.data;
     },
     enabled: !!leadId,
+    refetchInterval: 30_000,
   });
 }
 
-// ── Add interaction (note) ──
 export function useAddInteraction(leadId: string) {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: {
-      type: InteractionType;
-      note: string;
-      recordingUrl?: string;
+    mutationFn: async (body: {
+      type: string;
+      note?: string;
+      callRecordingUrl?: string;
+      callDurationSecs?: number;
     }) => {
-      const { data } = await api.post<{
-        success: true;
-        data: Interaction;
-      }>(`/leads/${leadId}/interactions`, params);
+      const { data } = await api.post(`/leads/${leadId}/interactions`, body);
       return data.data;
     },
     onSuccess: () => {
-      toast.success("Interaction added successfully");
+      success("Interaction added");
       void qc.invalidateQueries({ queryKey: ["interactions", leadId] });
-      void qc.invalidateQueries({ queryKey: ["leads"] });
+      void qc.invalidateQueries({ queryKey: ["lead", leadId] });
     },
-    onError: (error) => {
-      toast.error("Failed to add interaction");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to add", extractApiError(e)),
   });
 }
 
-// ── Edit interaction ──
-export function useEditInteraction(leadId: string) {
+export function useEditInteraction() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (params: { interactionId: string; note: string }) => {
-      const { data } = await api.patch<{
-        success: true;
-        data: Interaction;
-      }>(`/interactions/${params.interactionId}`, { note: params.note });
-      return data.data;
+    mutationFn: async ({
+      id,
+      leadId,
+      note,
+    }: {
+      id: string;
+      leadId: string;
+      note: string;
+    }) => {
+      await api.patch(`/interactions/${id}`, { note });
+      return leadId;
     },
-    onSuccess: () => {
-      toast.success("Interaction updated successfully");
+    onSuccess: (leadId) => {
+      success("Note updated");
       void qc.invalidateQueries({ queryKey: ["interactions", leadId] });
     },
-    onError: (error) => {
-      toast.error("Failed to update interaction");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to update", extractApiError(e)),
   });
 }
 
-// ── Delete interaction (ADMIN only) ──
-export function useDeleteInteraction(leadId: string) {
+export function useDeleteInteraction() {
   const qc = useQueryClient();
-
+  const { success, error } = useNotifications();
   return useMutation({
-    mutationFn: async (interactionId: string) => {
-      await api.delete(`/interactions/${interactionId}`);
+    mutationFn: async ({ id, leadId }: { id: string; leadId: string }) => {
+      await api.delete(`/interactions/${id}`);
+      return leadId;
     },
-    onSuccess: () => {
-      toast.success("Interaction deleted successfully");
+    onSuccess: (leadId) => {
+      success("Interaction removed");
       void qc.invalidateQueries({ queryKey: ["interactions", leadId] });
     },
-    onError: (error) => {
-      toast.error("Failed to delete interaction");
-      console.error(error);
-    },
+    onError: (e) => error("Failed to delete", extractApiError(e)),
   });
 }

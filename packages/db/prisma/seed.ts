@@ -39,6 +39,32 @@ async function main() {
     },
   });
 
+  const staffPasswordHash = await bcrypt.hash("Staff@FutureEd123", 12);
+
+  await prisma.user.upsert({
+    where: { email: "subadmin@futureeducation.in" },
+    update: { passwordHash: staffPasswordHash },
+    create: {
+      name: "Sub Admin",
+      email: "subadmin@futureeducation.in",
+      passwordHash: staffPasswordHash,
+      role: "SUB_ADMIN",
+      branchId: branch.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "employee@futureeducation.in" },
+    update: { passwordHash: staffPasswordHash },
+    create: {
+      name: "Employee",
+      email: "employee@futureeducation.in",
+      passwordHash: staffPasswordHash,
+      role: "EMPLOYEE",
+      branchId: branch.id,
+    },
+  });
+
   // 3. Seed lead source types
   const sources = [
     "Desk Enquiry",
