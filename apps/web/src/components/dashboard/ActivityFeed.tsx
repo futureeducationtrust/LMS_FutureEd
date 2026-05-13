@@ -58,8 +58,10 @@ export function ActivityFeed() {
   const { data, isLoading, isError } = useQuery<ActivityFeedItem[]>({
     queryKey: ["activity-feed"],
     queryFn: async () => {
-      const { data } = await api.get<ActivityFeedResponse>("/activity");
-      return data.interactions;
+      const { data } = await api.get<{ data?: ActivityFeedResponse }>(
+        "/activity",
+      );
+      return data.data?.interactions ?? [];
     },
     refetchInterval: 30_000,
     staleTime: 20_000,

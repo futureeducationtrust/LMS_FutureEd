@@ -3,75 +3,32 @@ import { authenticate } from "../../middleware/authenticate";
 import { Role } from "@lms/types";
 
 export async function activityRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.get(
-    "/",
-    {
-      preHandler: authenticate,
-    },
-    async (request, reply) => {
-      const { id: userId, role } = request.user;
+  // ── Activity feed (admin/sub-admin dashboard) ──
+  fastify.get("/", { preHandler: authenticate }, async (request, reply) => {
+    const { id: userId, role, branchId } = request.user;
+    const cacheKey = `activity:${role}:${branchId}:${userId}`;
 
-      const where: Record<string, unknown> = {
-        isDeleted: false,
-      };
-
-      // Employees only see activity on their leads
-      if (role === Role.EMPLOYEE) {
-        where["lead"] = {
-          OR: [{ assignedToId: userId }, { createdById: userId }],
-        };
+    // Check Redis cache — 30 second TTL
+    try {
+      const cached = await fastify.redis.get(cacheKey);
+      if (cached) {
+        return reply.send({ success: true, data: JSON.parse(cached) });
       }
+    } catch {}
 
-      const interactions = await fastify.prisma.interactionLog.findMany({
-        where,
-        select: {
-          id: true,
-          type: true,
-          note: true,
-          statusBefore: true,
-          statusAfter: true,
-          createdAt: true,
-          user: { select: { id: true, name: true } },
-          lead: {
-            select: {
-              id: true,
-              studentName: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-      });
+    const where: Record<string, unknown> = { isDeleted: false };
 
-      return reply.status(200).send({ success: true, data: { interactions } });
-    },
-  );
-
-  // GET /activity/notifications — user-specific unread events
-  fastify.get(
-    "/notifications",
-    {
-      preHandler: authenticate,
-    },
-    async (request, reply) => {
-      const { id: userId, role } = request.user;
-
-      // Get recent events relevant to this user
-      const where: Record<string, unknown> = {
-        isDeleted: false,
-        userId: { not: userId }, // exclude own actions
-        createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // last 7 days
-        },
+    if (role === Role.EMPLOYEE) {
+      where["lead"] = {
+        OR: [{ assignedToId: userId }, { createdById: userId }],
       };
+    } else {
+      // Admin/SubAdmin — scoped to branch
+      where["lead"] = { branchId };
+    }
 
-      if (role === "EMPLOYEE") {
-        where["lead"] = {
-          OR: [{ assignedToId: userId }, { createdById: userId }],
-        };
-      }
-
-      const items = await fastify.prisma.interactionLog.findMany({
+    const [interactions, assignments] = await Promise.all([
+      fastify.prisma.interactionLog.findMany({
         where,
         select: {
           id: true,
@@ -84,14 +41,13 @@ export async function activityRoutes(fastify: FastifyInstance): Promise<void> {
           lead: { select: { id: true, studentName: true } },
         },
         orderBy: { createdAt: "desc" },
-        take: 30,
-      });
-
-      // Also get recent assignments to this user
-      const assignments = await fastify.prisma.assignmentHistory.findMany({
+        take: 25,
+      }),
+      fastify.prisma.assignmentHistory.findMany({
         where: {
-          assignedToId: userId,
+          lead: { branchId },
           createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          ...(role === Role.EMPLOYEE ? { assignedToId: userId } : {}),
         },
         select: {
           id: true,
@@ -99,15 +55,130 @@ export async function activityRoutes(fastify: FastifyInstance): Promise<void> {
           reason: true,
           assignedBy: { select: { id: true, name: true } },
           lead: { select: { id: true, studentName: true } },
+          assignedToId: true,
         },
         orderBy: { createdAt: "desc" },
         take: 10,
-      });
+      }),
+    ]);
 
-      return reply.status(200).send({
-        success: true,
-        data: { interactions: items, assignments },
-      });
+    const data = { interactions, assignments };
+
+    try {
+      await fastify.redis.setex(cacheKey, 30, JSON.stringify(data));
+    } catch {}
+
+    return reply.send({ success: true, data });
+  });
+
+  // ── Role-specific notifications ──
+  fastify.get(
+    "/notifications",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: userId, role, branchId } = request.user;
+      const cacheKey = `notifs:${userId}`;
+
+      try {
+        const cached = await fastify.redis.get(cacheKey);
+        if (cached)
+          return reply.send({ success: true, data: JSON.parse(cached) });
+      } catch {}
+
+      // Role-based where clause for interactions
+      const interactionWhere: Record<string, unknown> = {
+        isDeleted: false,
+        userId: { not: userId }, // exclude own actions
+        createdAt: { gte: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) }, // last 3 days
+      };
+
+      if (role === Role.EMPLOYEE) {
+        // Employee only sees interactions on their leads
+        interactionWhere["lead"] = {
+          OR: [{ assignedToId: userId }, { createdById: userId }],
+        };
+      } else {
+        // Admin/SubAdmin see all branch interactions
+        interactionWhere["lead"] = { branchId };
+      }
+
+      // Assignment notifications — "X assigned a lead to you"
+      const assignmentWhere: Record<string, unknown> = {
+        createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      };
+
+      if (role === Role.EMPLOYEE) {
+        // Employee only sees assignments TO them
+        assignmentWhere["assignedToId"] = userId;
+      } else {
+        // Admin/SubAdmin see all assignments in branch
+        assignmentWhere["lead"] = { branchId };
+      }
+
+      const [interactions, assignments, overdueLeads] = await Promise.all([
+        fastify.prisma.interactionLog.findMany({
+          where: interactionWhere,
+          select: {
+            id: true,
+            type: true,
+            note: true,
+            statusBefore: true,
+            statusAfter: true,
+            createdAt: true,
+            user: { select: { id: true, name: true } },
+            lead: { select: { id: true, studentName: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        }),
+
+        fastify.prisma.assignmentHistory.findMany({
+          where: assignmentWhere,
+          select: {
+            id: true,
+            createdAt: true,
+            reason: true,
+            assignedBy: { select: { id: true, name: true } },
+            assignedToId: true,
+            lead: { select: { id: true, studentName: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+        }),
+
+        // Overdue follow-ups relevant to user
+        fastify.prisma.lead.findMany({
+          where: {
+            nextFollowUpAt: { lte: new Date() },
+            status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
+            ...(role === Role.EMPLOYEE
+              ? { OR: [{ assignedToId: userId }, { createdById: userId }] }
+              : { branchId }),
+          },
+          select: {
+            id: true,
+            studentName: true,
+            nextFollowUpAt: true,
+            assignedTo: { select: { id: true, name: true } },
+          },
+          orderBy: { nextFollowUpAt: "asc" },
+          take: 5,
+        }),
+      ]);
+
+      const data = {
+        interactions,
+        assignments,
+        overdueLeads,
+        userRole: role,
+        userId,
+      };
+
+      try {
+        await fastify.redis.setex(cacheKey, 60, JSON.stringify(data)); // 60s cache
+      } catch {}
+
+      return reply.send({ success: true, data });
     },
   );
 }

@@ -189,7 +189,7 @@ export type CreateLeadParams = {
   alternatePhone?: string;
   whatsappPhone?: string;
   email?: string;
-  nextFollowUpAt?: string;
+  nextFollowUpAt?: string | null;
   sendEmail?: boolean;
 };
 

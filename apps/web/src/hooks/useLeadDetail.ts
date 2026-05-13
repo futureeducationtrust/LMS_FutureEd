@@ -80,7 +80,14 @@ export function useEditInteraction() {
 export function useTransitionLead(leadId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { toStatus: LeadStatus; note?: string }) => {
+    mutationFn: async (params: {
+      toStatus: LeadStatus;
+      note?: string;
+      sendEmailToStudent?: boolean;
+      institutionName?: string;
+      programName?: string;
+      applicationNumber?: string;
+    }) => {
       await api.post(`/leads/${leadId}/transition`, params);
     },
     onSuccess: () => {

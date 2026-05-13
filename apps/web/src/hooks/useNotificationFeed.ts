@@ -1,90 +1,120 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useAuthStore } from "@/store/auth";
+import { Role } from "@lms/types";
 
-const LAST_SEEN_KEY = "lms_notifications_last_seen";
+const LAST_SEEN_KEY = "lms_notif_seen";
 
-export type NotificationItem = {
+export type NotifItem = {
   id: string;
-  type: "interaction" | "assignment";
+  category: "assignment" | "status" | "interaction" | "overdue";
   message: string;
-  leadId: string;
-  studentName: string;
+  leadId: string | null;
   createdAt: string;
   isRead: boolean;
 };
 
-type NotificationSource = {
-  type?: string;
-  user?: { name?: string };
-  assignedBy?: { name?: string };
-  lead?: { studentName?: string };
-  statusAfter?: string;
-};
-
 function buildMessage(
-  item: NotificationSource,
-  type: "interaction" | "assignment",
+  item: any,
+  category: string,
+  userId: string,
+  role: string,
 ): string {
-  if (type === "assignment") {
-    return `${item.assignedBy?.name} assigned ${item.lead?.studentName} to you`;
-  }
-  switch (item.type) {
-    case "STATUS_CHANGED":
-      return `${item.user?.name} moved ${item.lead?.studentName} → ${item.statusAfter?.replace(/_/g, " ")}`;
-    case "CALL":
-      return `${item.user?.name} logged a call with ${item.lead?.studentName}`;
-    case "NOTE":
-      return `${item.user?.name} added a note on ${item.lead?.studentName}`;
-    default:
+  switch (category) {
+    case "assignment": {
+      const isForMe = item.assignedToId === userId;
+      if (isForMe)
+        return `${item.assignedBy?.name ?? "Admin"} assigned ${item.lead?.studentName} to you`;
+      return `${item.assignedBy?.name ?? "Admin"} assigned ${item.lead?.studentName} to a counsellor`;
+    }
+    case "status":
+      return `${item.user?.name} moved ${item.lead?.studentName} → ${(item.statusAfter ?? "").replace(/_/g, " ")}`;
+    case "overdue":
+      return `Follow-up overdue: ${item.studentName}${item.assignedTo ? ` (${item.assignedTo.name})` : ""}`;
+    case "interaction":
+      if (item.type === "CALL")
+        return `${item.user?.name} logged a call with ${item.lead?.studentName}`;
+      if (item.type === "NOTE")
+        return `${item.user?.name} added a note on ${item.lead?.studentName}`;
+      if (item.type === "DOCUMENT_UPLOADED")
+        return `${item.user?.name} uploaded a document for ${item.lead?.studentName}`;
       return `${item.user?.name} updated ${item.lead?.studentName}`;
+    default:
+      return "New activity";
   }
 }
 
 export function useNotificationFeed() {
-  const [lastSeen, setLastSeen] = useState<number>(() => {
+  const { user } = useAuthStore();
+  const [lastSeen, setLastSeen] = useState(() => {
     if (typeof window === "undefined") return 0;
     return Number(localStorage.getItem(LAST_SEEN_KEY) ?? 0);
   });
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["notification-feed"],
+  const { data, isLoading } = useQuery({
+    queryKey: ["notif-feed", user?.id],
     queryFn: async () => {
       const { data } = await api.get("/activity/notifications");
       return data.data;
     },
     refetchInterval: 30_000,
+    enabled: !!user,
   });
 
-  const items: NotificationItem[] = [];
+  const items: NotifItem[] = [];
 
-  if (data) {
-    for (const item of data.interactions ?? []) {
+  if (data && user) {
+    // Assignments
+    for (const a of data.assignments ?? []) {
       items.push({
-        id: `i-${item.id}`,
-        type: "interaction",
-        message: buildMessage(item, "interaction"),
-        leadId: item.lead?.id,
-        studentName: item.lead?.studentName,
-        createdAt: item.createdAt,
-        isRead: new Date(item.createdAt).getTime() <= lastSeen,
+        id: `a-${a.id}`,
+        category: "assignment",
+        message: buildMessage(a, "assignment", user.id, user.role),
+        leadId: a.lead?.id ?? null,
+        createdAt: a.createdAt,
+        isRead: new Date(a.createdAt).getTime() <= lastSeen,
       });
     }
 
-    for (const item of data.assignments ?? []) {
+    // Status changes — show for admin/subadmin
+    for (const i of data.interactions ?? []) {
+      if (i.type === "STATUS_CHANGED") {
+        items.push({
+          id: `s-${i.id}`,
+          category: "status",
+          message: buildMessage(i, "status", user.id, user.role),
+          leadId: i.lead?.id ?? null,
+          createdAt: i.createdAt,
+          isRead: new Date(i.createdAt).getTime() <= lastSeen,
+        });
+      } else {
+        // Other interactions
+        items.push({
+          id: `i-${i.id}`,
+          category: "interaction",
+          message: buildMessage(i, "interaction", user.id, user.role),
+          leadId: i.lead?.id ?? null,
+          createdAt: i.createdAt,
+          isRead: new Date(i.createdAt).getTime() <= lastSeen,
+        });
+      }
+    }
+
+    // Overdue follow-ups
+    for (const l of data.overdueLeads ?? []) {
       items.push({
-        id: `a-${item.id}`,
-        type: "assignment",
-        message: buildMessage(item, "assignment"),
-        leadId: item.lead?.id,
-        studentName: item.lead?.studentName,
-        createdAt: item.createdAt,
-        isRead: new Date(item.createdAt).getTime() <= lastSeen,
+        id: `o-${l.id}`,
+        category: "overdue",
+        message: buildMessage(l, "overdue", user.id, user.role),
+        leadId: l.id,
+        createdAt: l.nextFollowUpAt,
+        isRead: new Date(l.nextFollowUpAt).getTime() <= lastSeen,
       });
     }
   }
 
-  // Sort by date
+  // Sort newest first
   items.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
@@ -97,11 +127,5 @@ export function useNotificationFeed() {
     setLastSeen(now);
   }
 
-  return {
-    items: items.slice(0, 20),
-    unreadCount,
-    isLoading,
-    markAllRead,
-    refetch,
-  };
+  return { items: items.slice(0, 25), unreadCount, isLoading, markAllRead };
 }

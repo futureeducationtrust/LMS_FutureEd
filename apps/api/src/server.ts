@@ -49,6 +49,7 @@ export async function buildServer() {
       return cb(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
 
   await fastify.register(multipart, {

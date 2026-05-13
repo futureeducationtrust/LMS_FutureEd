@@ -4,7 +4,11 @@ import { canTransitionLead } from "@lms/auth";
 import { transitionLead, getValidTransitions } from "@lms/core";
 import { LeadStatus, Role, TransitionLeadSchema } from "@lms/types";
 import { validateBody } from "../../middleware/validate";
-import { invalidateAnalyticsCache } from "../../services/cache";
+import { QUEUES } from "../../plugins/bullmq";
+import {
+  invalidateAnalyticsCache,
+  invalidateActivityCache,
+} from "../../services/cache";
 
 export async function transitionLeadRoute(
   fastify: FastifyInstance,
@@ -27,6 +31,8 @@ export async function transitionLeadRoute(
         where: { id },
         select: {
           id: true,
+          studentName: true,
+          email: true,
           status: true,
           assignedTo: { select: { id: true } },
           createdBy: { select: { id: true } },
@@ -123,7 +129,30 @@ export async function transitionLeadRoute(
         }
       });
 
+      if (
+        toStatus === LeadStatus.APPLICATION_SENT &&
+        validation.data.sendEmailToStudent &&
+        lead.email
+      ) {
+        await fastify.queues[QUEUES.NOTIFICATIONS].add(
+          "application-sent-email",
+          {
+            to: lead.email,
+            studentName: lead.studentName,
+            institutionName: validation.data.institutionName ?? "Institution",
+            programName: validation.data.programName ?? "Program",
+            applicationNumber: validation.data.applicationNumber ?? undefined,
+          },
+          { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+        );
+      }
+
       await invalidateAnalyticsCache(fastify.redis);
+      await invalidateActivityCache(
+        fastify.redis,
+        request.user.branchId,
+        request.user.id,
+      );
 
       return reply.status(200).send({
         success: true,

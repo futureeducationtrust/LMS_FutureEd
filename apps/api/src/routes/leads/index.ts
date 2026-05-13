@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
+import { authorize } from "../../middleware/authorize";
 import { canViewLead } from "@lms/auth";
 import { canEmployeeSeeConfirmedLead } from "@lms/core";
 import { LeadStatus, Role } from "@lms/types";
@@ -57,7 +58,7 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
             include: { course: true },
           },
           assignedTo: { select: { name: true } },
-          branch: { select: { name: true, address: true } },
+          branch: { select: { name: true, city: true, address: true } },
           assignedToId: true,
           createdById: true,
           branchId: true,
@@ -129,7 +130,7 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       const PDFDocument = (await import("pdfkit")).default;
       const doc = new PDFDocument({ margin: 40, size: "A4" });
       const app = lead.confirmedApplication;
-      const fileName = `admission-${lead.studentName.replace(/\s+/g, "-")}.pdf`;
+      const fileName = `FE-${lead.studentName.replace(/\s+/g, "-")}-Admission.pdf`;
 
       void reply
         .header("Content-Type", "application/pdf")
@@ -168,8 +169,8 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       doc.fontSize(13).font("Helvetica");
       doc.text("Admission Assistance Form", { align: "center" });
       doc.fontSize(9).text(lead.branch.name, { align: "center" });
-      if (lead.branch.address) {
-        doc.text(lead.branch.address, { align: "center" });
+      if (lead.branch.address || lead.branch.city) {
+        doc.text(lead.branch.address ?? lead.branch.city, { align: "center" });
       }
       doc.moveDown();
       doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
@@ -309,6 +310,55 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
     },
   );
 
+  // POST /leads/:id/confirmed/documents
+  fastify.post(
+    "/:id/confirmed/documents",
+    {
+      preHandler: authenticate,
+    },
+    async (request, reply) => {
+      const { id: leadId } = request.params as { id: string };
+      const { documentTypeId, fileUrl, fileName, confirmedApplicationId } =
+        request.body as {
+          documentTypeId: string;
+          fileUrl: string;
+          fileName: string;
+          confirmedApplicationId: string;
+        };
+
+      const lead = await fastify.prisma.lead.findUnique({
+        where: { id: leadId },
+        select: {
+          id: true,
+          confirmedApplication: { select: { id: true } },
+        },
+      });
+
+      if (!lead?.confirmedApplication) {
+        return reply.status(404).send({
+          success: false,
+          error: {
+            code: "NOT_FOUND",
+            message: "Confirmed application not found",
+          },
+        });
+      }
+
+      const doc = await fastify.prisma.leadDocument.create({
+        data: {
+          confirmedApplicationId:
+            confirmedApplicationId || lead.confirmedApplication.id,
+          documentTypeId,
+          fileUrl,
+          fileName,
+        },
+        include: { documentType: true },
+      });
+
+      return reply.status(201).send({ success: true, data: doc });
+    },
+  );
+
   // POST /leads/import
   fastify.post(
     "/import",
@@ -412,20 +462,4 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(updateLeadRoute);
   await fastify.register(transitionLeadRoute);
   await fastify.register(assignLeadRoute);
-}
-function authorize(
-  arg0: Role[],
-): import("fastify/types/route").RouteShorthandHook<
-  import("fastify").preHandlerHookHandler<
-    import("fastify").RawServerDefault,
-    import("node:http").IncomingMessage,
-    import("node:http").ServerResponse<import("node:http").IncomingMessage>,
-    import("fastify").RouteGenericInterface,
-    unknown,
-    NoInfer<import("fastify").FastifySchema>,
-    import("fastify").FastifyTypeProviderDefault,
-    import("fastify").FastifyBaseLogger
-  >
-> {
-  throw new Error("Function not implemented.");
 }

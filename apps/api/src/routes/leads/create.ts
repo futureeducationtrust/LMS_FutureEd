@@ -11,7 +11,10 @@ import { findDuplicateLeads } from "./service";
 import { CreateLeadSchema } from "@lms/types";
 import { validateBody } from "../../middleware/validate";
 import { QUEUES } from "../../plugins/bullmq";
-import { invalidateAnalyticsCache } from "../../services/cache";
+import {
+  invalidateAnalyticsCache,
+  invalidateActivityCache,
+} from "../../services/cache";
 
 export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
   fastify.post(
@@ -96,6 +99,9 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
               });
             });
 
+            await invalidateAnalyticsCache(fastify.redis);
+            await invalidateActivityCache(fastify.redis, branchId, userId);
+
             const revivedLead = await fastify.prisma.lead.findUnique({
               where: { id: duplicateResult.originalLeadId },
             });
@@ -157,6 +163,9 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
               });
             }
           });
+
+          await invalidateAnalyticsCache(fastify.redis);
+          await invalidateActivityCache(fastify.redis, branchId, userId);
 
           return reply.status(200).send({
             success: true,
@@ -258,6 +267,7 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
         });
       }
       await invalidateAnalyticsCache(fastify.redis);
+      await invalidateActivityCache(fastify.redis, branchId, userId);
       return reply.status(201).send({ success: true, data: { lead } });
     },
   );

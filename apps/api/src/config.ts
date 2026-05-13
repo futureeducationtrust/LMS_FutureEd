@@ -55,6 +55,16 @@ export const config = {
     "https://api.futureeducationonline.com",
   ),
 
+  // Email
+  smtp: {
+    host: optionalEnv("SMTP_HOST", "smtp.gmail.com"),
+    port: parseInt(optionalEnv("SMTP_PORT", "587"), 10),
+    user: optionalEnv("SMTP_USER", ""),
+    pass: optionalEnv("SMTP_PASS", ""),
+    from: optionalEnv("SMTP_FROM", "FutureEd LMS <noreply@futureeducation.in>"),
+  },
+  frontendUrl: optionalEnv("FRONTEND_URL", "http://localhost:3000"),
+
   isProd: process.env["NODE_ENV"] === "production",
   isDev: process.env["NODE_ENV"] !== "production",
 } as const;

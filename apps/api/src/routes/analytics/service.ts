@@ -455,62 +455,57 @@ export async function getFollowUpCompliance(params: {
   const now = new Date();
   const branchFilter = branchId ? { branchId } : {};
 
-  const [overdueLeads, scheduledNeverActed, employeeOverdueSummary] =
-    await Promise.all([
-      // Leads where follow-up date passed — any status
-      prisma.lead.findMany({
-        where: {
-          ...branchFilter,
-          nextFollowUpAt: { lte: now },
-          status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
-        },
-        select: {
-          id: true,
-          studentName: true,
-          phone: true,
-          status: true,
-          nextFollowUpAt: true,
-          assignedTo: { select: { id: true, name: true } },
-          createdAt: true,
-        },
-        orderBy: { nextFollowUpAt: "asc" },
-      }),
+  const overdueLeads = await prisma.lead.findMany({
+    where: {
+      ...branchFilter,
+      nextFollowUpAt: { lte: now },
+      status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
+    },
+    select: {
+      id: true,
+      studentName: true,
+      phone: true,
+      status: true,
+      nextFollowUpAt: true,
+      assignedTo: { select: { id: true, name: true } },
+      createdAt: true,
+    },
+    orderBy: { nextFollowUpAt: "asc" },
+  });
 
-      // Leads with follow-up date in past AND no interaction added after that date
-      // These are "scheduled but completely ignored"
-      prisma.lead.findMany({
+  const interactionRecency = overdueLeads.length
+    ? await prisma.interactionLog.groupBy({
+        by: ["leadId"],
         where: {
-          ...branchFilter,
-          nextFollowUpAt: { lte: now },
-          status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
-          interactions: {
-            none: {
-              createdAt: { gte: prisma.lead.fields.nextFollowUpAt as any },
-              isDeleted: false,
-            },
-          },
+          isDeleted: false,
+          leadId: { in: overdueLeads.map((lead) => lead.id) },
         },
-        select: {
-          id: true,
-          studentName: true,
-          phone: true,
-          nextFollowUpAt: true,
-          assignedTo: { select: { id: true, name: true } },
-        },
-      }),
+        _max: { createdAt: true },
+      })
+    : [];
 
-      // Per-employee overdue count
-      prisma.lead.groupBy({
-        by: ["assignedToId"],
-        where: {
-          ...branchFilter,
-          nextFollowUpAt: { lte: now },
-          status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
-          assignedToId: { not: null },
-        },
-        _count: { _all: true },
-      }),
-    ]);
+  const latestInteractionByLead = new Map(
+    interactionRecency.map((row) => [row.leadId, row._max.createdAt]),
+  );
+
+  const scheduledNeverActed = overdueLeads.filter((lead) => {
+    const nextFollowUpAt = lead.nextFollowUpAt;
+    if (!nextFollowUpAt) return false;
+
+    const latestInteraction = latestInteractionByLead.get(lead.id);
+    return !latestInteraction || latestInteraction < nextFollowUpAt;
+  });
+
+  const employeeOverdueSummary = await prisma.lead.groupBy({
+    by: ["assignedToId"],
+    where: {
+      ...branchFilter,
+      nextFollowUpAt: { lte: now },
+      status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
+      assignedToId: { not: null },
+    },
+    _count: { _all: true },
+  });
 
   // Enrich employee summary with names
   const employeeIds = employeeOverdueSummary

@@ -4,7 +4,10 @@ import { canAssignLead } from "@lms/auth";
 import { validateReassignment } from "@lms/core";
 import { Role, AssignLeadSchema } from "@lms/types";
 import { validateBody } from "../../middleware/validate";
-import { invalidateAnalyticsCache } from "../../services/cache";
+import {
+  invalidateAnalyticsCache,
+  invalidateActivityCache,
+} from "../../services/cache";
 
 export async function assignLeadRoute(fastify: FastifyInstance): Promise<void> {
   fastify.post(
@@ -17,7 +20,9 @@ export async function assignLeadRoute(fastify: FastifyInstance): Promise<void> {
       const { id: userId, role } = request.user;
       const bodyValidation = validateBody(AssignLeadSchema, request.body);
       if (!bodyValidation.success) {
-        return reply.status(400).send({ success: false, ...bodyValidation.error });
+        return reply
+          .status(400)
+          .send({ success: false, ...bodyValidation.error });
       }
       const { assignedToId, reason } = bodyValidation.data;
 
@@ -104,6 +109,11 @@ export async function assignLeadRoute(fastify: FastifyInstance): Promise<void> {
       });
 
       await invalidateAnalyticsCache(fastify.redis);
+      await invalidateActivityCache(
+        fastify.redis,
+        request.user.branchId,
+        request.user.id,
+      );
 
       return reply.status(200).send({ success: true, data: { assignedToId } });
     },

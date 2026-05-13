@@ -4,16 +4,20 @@ import { useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import {
   Phone,
   MessageSquare,
   UserCheck,
   CheckCircle,
   AlertCircle,
+  Calendar,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { QuickNoteModal } from "./QuickNoteModal";
 import { QuickAssignModal } from "./QuickAssignModal";
+import api from "@/lib/api";
 import { useMarkFollowUpDone } from "@/hooks/useLeads";
 import { useAuthStore } from "@/store/auth";
 import { Role } from "@lms/types";
@@ -28,10 +32,23 @@ type ActiveModal =
   | null;
 
 export function LeadCards({ leads }: { leads: LeadSummary[] }) {
+  const qc = useQueryClient();
   const { user } = useAuthStore();
   const isManager = user?.role === Role.ADMIN || user?.role === Role.SUB_ADMIN;
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const markDone = useMarkFollowUpDone();
+  const setFollowUp = useMutation({
+    mutationFn: async (params: { leadId: string; nextFollowUpAt: string }) => {
+      await api.patch(`/leads/${params.leadId}`, {
+        nextFollowUpAt: params.nextFollowUpAt,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Follow-up set");
+      void qc.invalidateQueries({ queryKey: ["leads"] });
+    },
+    onError: () => toast.error("Failed to set follow-up"),
+  });
 
   return (
     <>
@@ -139,6 +156,24 @@ export function LeadCards({ leads }: { leads: LeadSummary[] }) {
                   >
                     <CheckCircle size={13} />
                     Done
+                  </button>
+                )}
+
+                {!lead.nextFollowUpAt && (
+                  <button
+                    onClick={() => {
+                      const tomorrow = new Date();
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      tomorrow.setHours(10, 0, 0, 0);
+                      void setFollowUp.mutateAsync({
+                        leadId: lead.id,
+                        nextFollowUpAt: tomorrow.toISOString(),
+                      });
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs text-gray-500 hover:text-primary hover:bg-primary-50 transition-colors"
+                  >
+                    <Calendar size={13} />
+                    Set Follow-up
                   </button>
                 )}
               </div>

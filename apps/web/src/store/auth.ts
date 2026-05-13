@@ -16,6 +16,8 @@ type AuthState = {
   user: AuthUser | null;
   isLoading: boolean;
   isBootstrapped: boolean;
+  isBootstrapping: boolean;
+  isAuthenticated: boolean;
 
   setAuth: (user: AuthUser, accessToken: string) => void;
   clearAuth: () => void;
@@ -26,20 +28,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isLoading: false,
   isBootstrapped: false,
+  isBootstrapping: false,
+  isAuthenticated: false,
 
   setAuth: (user, accessToken) => {
     tokenStore.set(accessToken);
-    set({ user, isLoading: false });
+    set({ user, isLoading: false, isAuthenticated: true });
   },
 
   clearAuth: () => {
     tokenStore.clear();
-    set({ user: null, isLoading: false });
+    set({ user: null, isLoading: false, isAuthenticated: false });
   },
 
   bootstrap: async () => {
-    if (get().isBootstrapped) return;
-    set({ isLoading: true });
+    if (get().isBootstrapped || get().isBootstrapping) return;
+    set({ isLoading: true, isBootstrapping: true });
     try {
       // Try refresh first to get new access token
       const { data: refreshData } = await api.post("/auth/refresh");
@@ -47,9 +51,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Then get user info
       const { data: meData } = await api.get("/auth/me");
-      set({ user: meData.data, isLoading: false, isBootstrapped: true });
+      set({
+        user: meData.data,
+        isLoading: false,
+        isBootstrapped: true,
+        isBootstrapping: false,
+        isAuthenticated: true,
+      });
     } catch {
-      set({ user: null, isLoading: false, isBootstrapped: true });
+      set({
+        user: null,
+        isLoading: false,
+        isBootstrapped: true,
+        isBootstrapping: false,
+        isAuthenticated: false,
+      });
     }
   },
 }));

@@ -10,6 +10,7 @@ import {
 } from "@lms/types";
 import { validateBody } from "../../middleware/validate";
 import { dispatchInteractionNotification } from "../../services/notifications";
+import { invalidateActivityCache } from "../../services/cache";
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -147,6 +148,7 @@ export async function interactionRoutes(
         return reply.status(400).send({ success: false, ...validation.error });
       }
       const body = validation.data;
+      const { branchId } = request.user;
 
       // Fetch lead with full context
       const lead = await fastify.prisma.lead.findUnique({
@@ -242,6 +244,8 @@ export async function interactionRoutes(
         interactionType: body.type,
         note: finalNote,
       });
+
+      await invalidateActivityCache(fastify.redis, branchId, userId);
 
       return reply.status(201).send({ success: true, data: interaction });
     },
@@ -353,6 +357,12 @@ export async function interactionRoutes(
         });
       });
 
+      await invalidateActivityCache(
+        fastify.redis,
+        request.user.branchId,
+        userId,
+      );
+
       return reply.status(200).send({
         success: true,
         data: { message: "Note updated successfully" },
@@ -403,6 +413,12 @@ export async function interactionRoutes(
           deletedById: userId,
         },
       });
+
+      await invalidateActivityCache(
+        fastify.redis,
+        request.user.branchId,
+        userId,
+      );
 
       return reply.status(200).send({
         success: true,

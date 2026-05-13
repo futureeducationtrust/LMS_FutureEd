@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Users,
@@ -97,12 +98,19 @@ export function Sidebar({ onClose }: Props) {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-surface-200">
-        <div className="shrink-0 w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-          <span className="text-white text-xs font-bold">FE</span>
+        <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-white">
+          <Image
+            src="/logo.jpg"
+            alt="Future Education Trust"
+            width={32}
+            height={32}
+            className="w-8 h-8 object-contain"
+            priority
+          />
         </div>
         {!collapsed && (
           <div>
-            <p className="text-sm font-bold text-gray-900">FutureEd</p>
+            <p className="text-sm font-bold text-gray-900">Future Education</p>
             <p className="text-xs text-gray-500">LMS</p>
           </div>
         )}
@@ -185,8 +193,8 @@ export function Sidebar({ onClose }: Props) {
       <button
         onClick={() => setCollapsed(!collapsed)}
         className="absolute -right-3 top-6 w-6 h-6 bg-white border border-surface-200 rounded-full flex items-center justify-center shadow-sm hover:bg-surface-50 transition-colors"
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? (
           <ChevronRight size={12} className="text-gray-500" />
