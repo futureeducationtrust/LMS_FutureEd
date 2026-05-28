@@ -12,9 +12,10 @@ const nextConfig: NextConfig = {
               default-src 'self';
               script-src 'self' 'unsafe-eval' 'unsafe-inline';
               style-src 'self' 'unsafe-inline';
-              img-src 'self' data: blob:;
+              img-src 'self' data: blob: https://*.r2.dev;
               font-src 'self';
-              connect-src 'self' http://localhost:5000;
+              connect-src 'self' http://localhost:5000 https://*.r2.dev;
+              media-src 'self' https://*.r2.dev blob:;
             `
               .replace(/\s+/g, " ")
               .trim(),

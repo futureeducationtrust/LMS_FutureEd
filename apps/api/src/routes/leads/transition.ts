@@ -66,6 +66,27 @@ export async function transitionLeadRoute(
         });
       }
 
+      // Block APPLICATION_SENT unless the admission form is marked complete
+      if (toStatus === LeadStatus.APPLICATION_SENT) {
+        const confirmedApp =
+          await fastify.prisma.confirmedApplication.findUnique({
+            where: { leadId: id },
+            select: { isFormComplete: true },
+          });
+
+        if (!confirmedApp?.isFormComplete) {
+          return reply.status(400).send({
+            success: false,
+            error: {
+              code: "FORM_INCOMPLETE",
+              message:
+                "Admission application form must be filled and saved before marking as Application Sent",
+              details: { redirectTo: "admission-form" },
+            },
+          });
+        }
+      }
+
       // State machine validation
       const result = transitionLead(lead.status as LeadStatus, toStatus);
 

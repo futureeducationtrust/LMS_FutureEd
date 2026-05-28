@@ -15,6 +15,9 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  FileText,
+  CheckCircle2,
+  UserCircle,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useLogout } from "@/hooks/useAuthMutations";
@@ -36,6 +39,18 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Leads", href: "/leads", icon: Users },
   {
+    label: "Admissions",
+    href: "/admissions",
+    icon: FileText,
+    roles: [Role.ADMIN, Role.SUB_ADMIN, Role.EMPLOYEE],
+  },
+  {
+    label: "Confirmed Leads",
+    href: "/confirmed",
+    icon: CheckCircle2,
+    roles: [Role.ADMIN, Role.SUB_ADMIN, Role.EMPLOYEE],
+  },
+  {
     label: "Analytics",
     href: "/analytics",
     icon: BarChart3,
@@ -50,28 +65,26 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "Employees",
     href: "/employees",
-    icon: Users,
+    icon: UserCircle,
     roles: [Role.ADMIN, Role.SUB_ADMIN],
   },
-  // SUB_ADMIN gets Courses in sidebar (no Settings access)
   {
     label: "Courses",
     href: "/settings/courses",
     icon: GraduationCap,
-    roles: [Role.SUB_ADMIN], // ← SUB_ADMIN only in sidebar
+    roles: [Role.SUB_ADMIN],
   },
   {
     label: "Lead Sources",
     href: "/settings/sources",
     icon: Tag,
-    roles: [Role.SUB_ADMIN], // ← SUB_ADMIN only
+    roles: [Role.SUB_ADMIN],
   },
-  // ADMIN has Settings which contains Courses inside
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
-    roles: [Role.ADMIN], // ← ADMIN only
+    roles: [Role.ADMIN],
   },
 ];
 

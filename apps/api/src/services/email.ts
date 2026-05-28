@@ -224,3 +224,38 @@ export async function sendApplicationConfirmationEmail(params: {
     `),
   });
 }
+
+export async function sendAdmissionFormEmail(params: {
+  to: string;
+  studentName: string;
+  courseName: string;
+  branchName: string;
+  pdfBuffer: Buffer;
+}): Promise<void> {
+  if (!config.smtp.user || !config.smtp.pass) return;
+
+  await transporter.sendMail({
+    from: config.smtp.from,
+    to: params.to,
+    subject: `Admission Application — ${params.courseName} | Future Education`,
+    html: htmlWrapper(`
+      <div class="title">Your Admission Application</div>
+      <div class="body">Dear <strong>${params.studentName}</strong>,</div>
+      <div class="body">
+        Your admission assistance application for <strong>${params.courseName}</strong>
+        has been processed by our team at ${params.branchName}.
+      </div>
+      <div class="body">
+        Please find your admission form attached to this email. Keep it for your records.
+        Our counsellor will be in touch with you shortly regarding the next steps.
+      </div>
+    `),
+    attachments: [
+      {
+        filename: `Admission-Form-${params.studentName.replace(/\s+/g, "-")}.pdf`,
+        content: params.pdfBuffer,
+        contentType: "application/pdf",
+      },
+    ],
+  });
+}

@@ -56,10 +56,11 @@ export default function LeadDetailPage() {
     );
   }
 
-  const isConfirmed = lead.status === LeadStatus.CONFIRMED;
+  const hasAdmissionTab =
+    lead.status === LeadStatus.CONFIRMED || lead.status === LeadStatus.INTERESTED;
   const tabs: Array<{ key: Tab; label: string }> = [
     { key: "overview", label: "Overview & Timeline" },
-    ...(isConfirmed
+    ...(hasAdmissionTab
       ? [{ key: "confirmed" as Tab, label: "Admission Application" }]
       : []),
   ];
@@ -126,7 +127,7 @@ export default function LeadDetailPage() {
       {activeTab === "confirmed" ? (
         /* Confirmed application — full width */
         <div className="bg-white border border-surface-200 rounded-xl p-6">
-          <ConfirmedApplicationTab leadId={id} />
+          <ConfirmedApplicationTab leadId={id} leadStatus={lead.status} />
         </div>
       ) : (
         /* Overview — 2 column layout */

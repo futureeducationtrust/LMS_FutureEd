@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, ArrowRight, FileText } from "lucide-react";
 import { VALID_TRANSITIONS, LeadStatus } from "@lms/types";
 import { STATUS_CONFIG } from "@/config/leadStatus";
 import { useTransitionLead } from "@/hooks/useLeadDetail";
@@ -22,17 +23,12 @@ export function StatusTransition({
   const [open, setOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<LeadStatus | null>(null);
   const [note, setNote] = useState("");
-  const [appSentModal, setAppSentModal] = useState(false);
-  const [appSentForm, setAppSentForm] = useState({
-    institutionName: "",
-    programName: "",
-    applicationNumber: "",
-    sendEmailToStudent: false,
-    note: "",
-  });
   const transition = useTransitionLead(leadId);
 
-  const validNext = VALID_TRANSITIONS[currentStatus] ?? [];
+  // APPLICATION_SENT is handled via the Admissions form page, not the dropdown
+  const validNext = (VALID_TRANSITIONS[currentStatus] ?? []).filter(
+    (s) => s !== LeadStatus.APPLICATION_SENT,
+  );
 
   async function handleConfirm() {
     if (!selectedStatus) return;
@@ -42,35 +38,6 @@ export function StatusTransition({
     });
     setSelectedStatus(null);
     setNote("");
-    setOpen(false);
-  }
-
-  async function handleApplicationSentConfirm() {
-    const noteParts = [
-      `Application sent to: ${appSentForm.institutionName}`,
-      appSentForm.programName && `Program: ${appSentForm.programName}`,
-      appSentForm.applicationNumber &&
-        `Application No: ${appSentForm.applicationNumber}`,
-      appSentForm.note.trim(),
-    ].filter(Boolean);
-
-    await transition.mutateAsync({
-      toStatus: LeadStatus.APPLICATION_SENT,
-      note: noteParts.join("\n"),
-      sendEmailToStudent: appSentForm.sendEmailToStudent,
-      institutionName: appSentForm.institutionName,
-      programName: appSentForm.programName || undefined,
-      applicationNumber: appSentForm.applicationNumber || undefined,
-    });
-
-    setAppSentModal(false);
-    setAppSentForm({
-      institutionName: "",
-      programName: "",
-      applicationNumber: "",
-      sendEmailToStudent: false,
-      note: "",
-    });
     setOpen(false);
   }
 
@@ -105,13 +72,8 @@ export function StatusTransition({
                   <button
                     key={status}
                     onClick={() => {
-                      if (status === LeadStatus.APPLICATION_SENT) {
-                        setAppSentModal(true);
-                        setOpen(false);
-                      } else {
-                        setSelectedStatus(status);
-                        setOpen(false);
-                      }
+                      setSelectedStatus(status);
+                      setOpen(false);
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-50 transition-colors text-left"
                   >
@@ -168,104 +130,23 @@ export function StatusTransition({
         </div>
       )}
 
-      {appSentModal && (
-        <div className="border border-indigo-200 rounded-xl p-4 space-y-3 bg-indigo-50 mt-2">
-          <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide">
-            Application Sent Details
-          </p>
-
-          <div className="space-y-2">
-            <input
-              placeholder="Institution / College Name *"
-              value={appSentForm.institutionName}
-              onChange={(e) =>
-                setAppSentForm((p) => ({
-                  ...p,
-                  institutionName: e.target.value,
-                }))
-              }
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-            />
-            <input
-              placeholder="Program / Course Name"
-              value={appSentForm.programName}
-              onChange={(e) =>
-                setAppSentForm((p) => ({ ...p, programName: e.target.value }))
-              }
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-            />
-            <input
-              placeholder="Application / Form Number (optional)"
-              value={appSentForm.applicationNumber}
-              onChange={(e) =>
-                setAppSentForm((p) => ({
-                  ...p,
-                  applicationNumber: e.target.value,
-                }))
-              }
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-            />
-            <textarea
-              placeholder="Additional notes"
-              value={appSentForm.note}
-              onChange={(e) =>
-                setAppSentForm((p) => ({ ...p, note: e.target.value }))
-              }
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary resize-none bg-white"
-            />
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={appSentForm.sendEmailToStudent}
-                onChange={(e) =>
-                  setAppSentForm((p) => ({
-                    ...p,
-                    sendEmailToStudent: e.target.checked,
-                  }))
-                }
-                className="accent-primary w-4 h-4"
-              />
-              <span className="text-xs text-gray-600">
-                Send confirmation email to student
-              </span>
-            </label>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setAppSentModal(false);
-                setAppSentForm({
-                  institutionName: "",
-                  programName: "",
-                  applicationNumber: "",
-                  sendEmailToStudent: false,
-                  note: "",
-                });
-              }}
-              className="flex-1 py-1.5 text-xs text-gray-500 border border-surface-200 rounded-lg hover:text-gray-700"
-            >
-              Cancel
-            </button>
-            <button
-              disabled={!appSentForm.institutionName || transition.isPending}
-              onClick={() => void handleApplicationSentConfirm()}
-              className="flex-1 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg disabled:opacity-50 transition-colors"
-            >
-              {transition.isPending ? "Sending..." : "Confirm Sent"}
-            </button>
-          </div>
-        </div>
+      {/* Admissions hint — shown when INTERESTED and no other transitions remain */}
+      {canTransition && currentStatus === LeadStatus.INTERESTED && (
+        <Link
+          href={`/admissions/${leadId}`}
+          className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-primary-200 bg-primary-50 text-primary hover:bg-primary-100 transition-colors text-sm font-medium"
+        >
+          <FileText size={14} />
+          Fill Admission Form
+          <ArrowRight size={12} className="ml-auto" />
+        </Link>
       )}
 
-      {validNext.length === 0 && (
+      {validNext.length === 0 && currentStatus !== LeadStatus.INTERESTED && (
         <p className="text-xs text-gray-400 italic">
-          {currentStatus === LeadStatus.CONFIRMED
-            ? "Lead is confirmed — no further transitions"
-            : currentStatus === LeadStatus.DUPLICATE
-              ? "Duplicate leads cannot be transitioned"
-              : "No transitions available"}
+          {currentStatus === LeadStatus.DUPLICATE
+            ? "Duplicate leads cannot be transitioned"
+            : "No transitions available"}
         </p>
       )}
     </div>

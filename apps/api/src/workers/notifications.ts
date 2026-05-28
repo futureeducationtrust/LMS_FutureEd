@@ -8,6 +8,7 @@ import {
   sendLeadAssignedEmail,
   sendFollowUpReminderEmail,
   sendApplicationConfirmationEmail,
+  sendAdmissionFormEmail,
 } from "../services/email";
 import { config } from "../config";
 
@@ -76,6 +77,16 @@ export function startNotificationWorker(connection: Redis): Worker {
             institutionName: data.institutionName,
             programName: data.programName,
             applicationNumber: data.applicationNumber,
+          });
+          break;
+
+        case "admission-form-email":
+          await sendAdmissionFormEmail({
+            to: data.to,
+            studentName: data.studentName,
+            courseName: data.courseName,
+            branchName: data.branchName,
+            pdfBuffer: Buffer.from(data.pdfBuffer as string, "base64"),
           });
           break;
 

@@ -74,7 +74,7 @@ export enum Role {
     ],
     [LeadStatus.INTERESTED]: [
       LeadStatus.FOLLOW_UP_SCHEDULED,
-      LeadStatus.APPLICATION_SENT,
+      LeadStatus.CONFIRMED,
       LeadStatus.NOT_INTERESTED,
       LeadStatus.LOST,
     ],

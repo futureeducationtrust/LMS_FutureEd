@@ -14,6 +14,12 @@ import { unassignedLeadsRoute } from "./unassigned";
 import { overdueLeadsRoute } from "./overdue";
 import { leadFollowUpsRoute } from "./followups";
 import { bulkLeadRoutes } from "./bulk";
+import { generateAdmissionPDF } from "../../services/admissionPDF";
+import {
+  invalidateAnalyticsCache,
+  invalidateActivityCache,
+} from "../../services/cache";
+import { QUEUES } from "../../plugins/bullmq";
 
 export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
   // Order matters — specific routes before parameterized routes
@@ -129,154 +135,24 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      const PDFDocument = (await import("pdfkit")).default;
-      const doc = new PDFDocument({ margin: 40, size: "A4" });
-      const app = lead.confirmedApplication;
       const fileName = `FE-${lead.studentName.replace(/\s+/g, "-")}-Admission.pdf`;
 
-      void reply
-        .header("Content-Type", "application/pdf")
-        .header("Content-Disposition", `attachment; filename="${fileName}"`);
-
-      doc.pipe(reply.raw);
-
-      const ensureSpace = (minimumY = 700) => {
-        if (doc.y > minimumY) {
-          doc.addPage();
-          doc.y = 40;
-        }
-      };
-
-      const field = (
-        label: string,
-        value: string | number | Date | null | undefined,
-      ) => {
-        ensureSpace();
-        doc
-          .fontSize(9)
-          .font("Helvetica-Bold")
-          .text(`${label}: `, { continued: true });
-        const textValue =
-          value instanceof Date
-            ? value.toLocaleDateString("en-IN")
-            : value !== null && value !== undefined
-              ? String(value)
-              : "—";
-        doc.font("Helvetica").text(textValue);
-      };
-
-      // Header
-      doc.fontSize(18).font("Helvetica-Bold");
-      doc.text("FUTURE EDUCATION TRUST", { align: "center" });
-      doc.fontSize(13).font("Helvetica");
-      doc.text("Admission Assistance Form", { align: "center" });
-      doc.fontSize(9).text(lead.branch.name, { align: "center" });
-      if (lead.branch.address || lead.branch.city) {
-        doc.text(lead.branch.address ?? lead.branch.city, { align: "center" });
-      }
-      doc.moveDown();
-      doc.moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-      doc.moveDown();
-
-      // Student details
-      doc.fontSize(11).font("Helvetica-Bold").text("Student Information");
-      doc.moveDown(0.5);
-      field("Name", lead.studentName);
-      field("Father's Name", lead.fatherName);
-      field("Date of Birth", lead.dateOfBirth);
-      field("Phone", lead.phone);
-      field("Email", lead.email);
-      field(
-        "Address",
-        [lead.city, lead.district, lead.state].filter(Boolean).join(", ") ||
-          null,
-      );
-      field("Course", lead.courses[0]?.course.name ?? null);
-      field("Aadhar No.", app.aadharNo);
-      field("Apaar ID", app.apaarId);
-      field("Confirmed On", lead.confirmedAt);
-      field("Counsellor", lead.assignedTo?.name ?? null);
-      doc.moveDown();
-
-      // Payment
-      doc.fontSize(11).font("Helvetica-Bold").text("Payment Details");
-      doc.moveDown(0.5);
-      field(
-        "Booking Amount",
-        app.bookingAmount != null ? `₹${app.bookingAmount}` : null,
-      );
-      field(
-        "Admission Amount",
-        app.admissionAmount != null ? `₹${app.admissionAmount}` : null,
-      );
-      field("Dues", app.duesAmount != null ? `₹${app.duesAmount}` : null);
-      field("Permanent Address", app.permanentAddress);
-      field("Permanent Phone", app.permanentPhone);
-      field("Local Guardian", app.localGuardianName);
-      field("Guardian Address", app.localGuardianAddress);
-      field("Guardian Phone", app.localGuardianPhone);
-      field("Extra Curricular", app.extraCurricular);
-      field("Authorised By", app.authorisedBy);
-      doc.moveDown();
-
-      // Academic records
-      if (app.academicRecords.length > 0) {
-        doc.fontSize(11).font("Helvetica-Bold").text("Academic Records");
-        doc.moveDown(0.5);
-        for (const record of app.academicRecords) {
-          field(
-            record.level.replaceAll("_", " "),
-            [
-              record.institution,
-              record.board,
-              record.passingYear,
-              record.percentage != null ? `${record.percentage}%` : null,
-              record.grade,
-            ]
-              .filter(Boolean)
-              .join(" • ") || null,
-          );
-        }
-        doc.moveDown();
+      let pdfBuffer: Buffer;
+      try {
+        pdfBuffer = await generateAdmissionPDF(lead);
+      } catch (err) {
+        fastify.log.error(err, "PDF generation failed");
+        return reply.status(500).send({
+          success: false,
+          error: { code: "PDF_ERROR", message: "Failed to generate PDF" },
+        });
       }
 
-      // Entrance exams
-      if (app.entranceExams.length > 0) {
-        doc.fontSize(11).font("Helvetica-Bold").text("Entrance Exams");
-        doc.moveDown(0.5);
-        for (const exam of app.entranceExams) {
-          field(
-            exam.examName,
-            [
-              exam.rollNo,
-              exam.score,
-              exam.rank != null ? `Rank ${exam.rank}` : null,
-            ]
-              .filter(Boolean)
-              .join(" • ") || null,
-          );
-        }
-        doc.moveDown();
-      }
-
-      // Documents
-      if (app.documents.length > 0) {
-        doc.fontSize(11).font("Helvetica-Bold").text("Documents");
-        doc.moveDown(0.5);
-        for (const document of app.documents) {
-          field(
-            document.documentType.name,
-            `${document.fileName}${document.isVerified ? " (Verified)" : ""}`,
-          );
-        }
-      }
-
-      doc.moveDown(2);
-      doc
-        .fontSize(9)
-        .text("Authorised Signature: ___________________", { align: "right" });
-
-      doc.end();
+      return reply
+        .type("application/pdf")
+        .header("Content-Disposition", `attachment; filename="${fileName}"`)
+        .header("Content-Length", pdfBuffer.length)
+        .send(pdfBuffer);
     },
   );
 
@@ -309,6 +185,112 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       return reply.status(200).send({ success: true, data: app });
+    },
+  );
+
+  // POST /leads/:id/confirmed/academic — bulk replace academic records
+  fastify.post(
+    "/:id/confirmed/academic",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: leadId } = request.params as { id: string };
+      const { records } = request.body as {
+        records: Array<{
+          level: string;
+          stream?: string;
+          institution?: string;
+          board?: string;
+          passingYear?: number;
+          percentage?: number;
+          grade?: string;
+        }>;
+      };
+
+      const app = await fastify.prisma.confirmedApplication.findUnique({
+        where: { leadId },
+        select: { id: true },
+      });
+
+      if (!app) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Confirmed application not found" },
+        });
+      }
+
+      await fastify.prisma.$transaction([
+        fastify.prisma.academicRecord.deleteMany({
+          where: { confirmedApplicationId: app.id },
+        }),
+        ...(records.length > 0
+          ? [
+              fastify.prisma.academicRecord.createMany({
+                data: records.map((r) => ({
+                  confirmedApplicationId: app.id,
+                  level: r.level as any,
+                  stream: r.stream ?? null,
+                  institution: r.institution ?? null,
+                  board: r.board ?? null,
+                  passingYear: r.passingYear ?? null,
+                  percentage: r.percentage ?? null,
+                  grade: r.grade ?? null,
+                })),
+              }),
+            ]
+          : []),
+      ]);
+
+      return reply.status(200).send({ success: true });
+    },
+  );
+
+  // POST /leads/:id/confirmed/exams — bulk replace entrance exams
+  fastify.post(
+    "/:id/confirmed/exams",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: leadId } = request.params as { id: string };
+      const { exams } = request.body as {
+        exams: Array<{
+          examName: string;
+          rollNo?: string;
+          score?: string;
+          rank?: number;
+        }>;
+      };
+
+      const app = await fastify.prisma.confirmedApplication.findUnique({
+        where: { leadId },
+        select: { id: true },
+      });
+
+      if (!app) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Confirmed application not found" },
+        });
+      }
+
+      await fastify.prisma.$transaction([
+        fastify.prisma.entranceExamDetail.deleteMany({
+          where: { confirmedApplicationId: app.id },
+        }),
+        ...(exams.length > 0
+          ? [
+              fastify.prisma.entranceExamDetail.createMany({
+                data: exams.map((e) => ({
+                  confirmedApplicationId: app.id,
+                  examName: e.examName,
+                  rollNo: e.rollNo ?? null,
+                  score: e.score ?? null,
+                  rank: e.rank ?? null,
+                })),
+              }),
+            ]
+          : []),
+      ]);
+
+      return reply.status(200).send({ success: true });
     },
   );
 
@@ -449,17 +431,185 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       preHandler: authenticate,
     },
     async (request, reply) => {
-      const { id } = request.params as { id: string };
-      const body = request.body as Record<string, unknown>;
+      const { id: leadId } = request.params as { id: string };
+      const raw = request.body as Record<string, unknown>;
 
-      const updated = await fastify.prisma.confirmedApplication.update({
-        where: { leadId: id },
-        data: body as any,
+      const DATE_FIELDS = ["bookingDate", "admissionDate", "dueDate"] as const;
+      const body: Record<string, unknown> = { ...raw };
+      for (const field of DATE_FIELDS) {
+        if (typeof body[field] === "string" && body[field]) {
+          body[field] = new Date(body[field] as string);
+        } else if (body[field] === "" || body[field] === null) {
+          body[field] = null;
+        }
+      }
+
+      const existing = await fastify.prisma.confirmedApplication.findUnique({
+        where: { leadId },
+        select: { aadharNo: true, fatherOccupation: true, motherName: true },
+      });
+
+      const isFormComplete = Boolean(
+        (body["aadharNo"] || existing?.aadharNo) &&
+          (body["fatherOccupation"] ||
+            existing?.fatherOccupation ||
+            existing?.motherName ||
+            body["motherName"]),
+      );
+
+      const updated = await fastify.prisma.confirmedApplication.upsert({
+        where: { leadId },
+        create: {
+          leadId,
+          ...(body as any),
+          isFormComplete,
+        },
+        update: {
+          ...(body as any),
+          isFormComplete,
+        },
+        include: {
+          academicRecords: true,
+          entranceExams: true,
+          documents: { include: { documentType: true } },
+        },
       });
 
       return reply.status(200).send({ success: true, data: updated });
     },
   );
+
+  // POST /leads/:id/send-admission
+  fastify.post(
+    "/:id/send-admission",
+    {
+      preHandler: authenticate,
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { id: userId } = request.user;
+
+      const lead = await fastify.prisma.lead.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          studentName: true,
+          phone: true,
+          email: true,
+          fatherName: true,
+          dateOfBirth: true,
+          city: true,
+          district: true,
+          state: true,
+          qualification: true,
+          schoolCollege: true,
+          boardUniversity: true,
+          passingYear: true,
+          percentage: true,
+          status: true,
+          courses: { where: { isPrimary: true }, include: { course: true } },
+          assignedTo: { select: { name: true } },
+          branch: { select: { name: true, city: true, address: true } },
+          confirmedApplication: {
+            include: {
+              academicRecords: true,
+              entranceExams: true,
+              documents: { include: { documentType: true } },
+            },
+          },
+        },
+      });
+
+      if (!lead) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Lead not found" },
+        });
+      }
+
+      if (!lead.confirmedApplication) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: "FORM_INCOMPLETE", message: "Admission form not started yet" },
+        });
+      }
+
+      const pdfBuffer = await generateAdmissionPDF(lead);
+
+      let emailSent = false;
+      if (lead.email) {
+        try {
+          await fastify.queues[QUEUES.NOTIFICATIONS].add(
+            "admission-form-email",
+            {
+              to: lead.email,
+              studentName: lead.studentName,
+              branchName: lead.branch.name,
+              courseName: lead.courses[0]?.course.name ?? "",
+              pdfBuffer: pdfBuffer.toString("base64"),
+            },
+            { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+          );
+          emailSent = true;
+        } catch {
+          emailSent = false;
+        }
+      }
+
+      await fastify.prisma.$transaction(async (tx) => {
+        await tx.confirmedApplication.update({
+          where: { leadId: id },
+          data: {
+            sentToStudentAt: new Date(),
+            sentToStudentEmail: lead.email,
+            isFormComplete: true,
+          },
+        });
+
+        await tx.lead.update({
+          where: { id },
+          data: {
+            status: LeadStatus.CONFIRMED,
+            confirmedAt: new Date(),
+            confirmedById: userId,
+          },
+        });
+
+        await tx.interactionLog.create({
+          data: {
+            leadId: id,
+            userId,
+            type: "STATUS_CHANGED",
+            note: `Admission application form completed and sent${emailSent ? ` to ${lead.email}` : ""}`,
+            statusBefore: lead.status,
+            statusAfter: LeadStatus.CONFIRMED,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            leadId: id,
+            userId,
+            action: "ADMISSION_FORM_SENT",
+            newValue: { emailSent, sentTo: lead.email },
+          },
+        });
+      });
+
+      await invalidateAnalyticsCache(fastify.redis);
+      await invalidateActivityCache(
+        fastify.redis,
+        request.user.branchId,
+        request.user.id,
+      );
+
+      return reply.status(200).send({
+        success: true,
+        data: { emailSent, sentTo: lead.email ?? null },
+      });
+    },
+  );
+
   await fastify.register(leadDetailRoute);
   await fastify.register(updateLeadRoute);
   await fastify.register(transitionLeadRoute);

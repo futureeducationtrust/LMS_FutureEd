@@ -8,7 +8,12 @@ const ALLOWED_RECORDING_TYPES = [
   'audio/mp4',
   'audio/wav',
   'audio/ogg',
+  'audio/webm',
+  'audio/3gpp',
+  'audio/x-m4a',
+  'audio/aac',
   'video/mp4',
+  'video/webm',
 ]
 
 const ALLOWED_DOCUMENT_TYPES = [

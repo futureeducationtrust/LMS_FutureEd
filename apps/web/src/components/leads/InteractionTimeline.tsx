@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import {
@@ -12,8 +12,6 @@ import {
   ArrowRightLeft,
   Pencil,
   AlertCircle,
-  Play,
-  Pause,
 } from "lucide-react";
 import { InteractionType } from "@lms/types";
 import { useEditInteraction } from "@/hooks/useLeadDetail";
@@ -101,51 +99,16 @@ function groupByDate(interactions: Interaction[]) {
 }
 
 function AudioPlayer({ url }: { url: string }) {
-  const [playing, setPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio(url);
-    }
-    const audio = audioRef.current;
-    audio.onended = () => setPlaying(false);
-    return () => {
-      audio.onended = null;
-    };
-  }, [url]);
-
-  function toggle() {
-    if (audioRef.current) {
-      if (playing) {
-        audioRef.current.pause();
-      } else {
-        void audioRef.current.play();
-      }
-      setPlaying(!playing);
-    }
-  }
-
   return (
-    <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-surface-50 rounded-lg border border-surface-200">
-      <button
-        onClick={toggle}
-        title={playing ? "Pause" : "Play"}
-        className="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-white hover:bg-primary-800 transition-colors"
-      >
-        {playing ? <Pause size={12} /> : <Play size={12} />}
-      </button>
-      <div className="flex-1">
-        <p className="text-xs text-gray-500">Call Recording</p>
-      </div>
-      <a
-        href={url}
-        download
-        className="text-xs text-primary hover:underline"
-        onClick={(e) => e.stopPropagation()}
-      >
-        Download
-      </a>
+    <div className="mt-2 px-3 py-2 bg-surface-50 rounded-lg border border-surface-200">
+      <p className="text-xs text-gray-500 mb-1.5">Call Recording</p>
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <audio
+        src={url}
+        controls
+        className="w-full h-8"
+        title="Call recording"
+      />
     </div>
   );
 }
