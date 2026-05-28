@@ -21,7 +21,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   const refreshCookieOptions = {
     httpOnly: true,
     secure: config.isProd,
-    sameSite: "lax" as const,
+    // SameSite=None required for cross-domain cookies (Vercel ↔ Railway)
+    sameSite: (config.isProd ? "none" : "lax") as "none" | "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60,
   };
