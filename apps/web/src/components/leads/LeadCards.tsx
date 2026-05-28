@@ -10,7 +10,6 @@ import {
   UserCheck,
   CheckCircle,
   AlertCircle,
-  CheckSquare,
 } from "lucide-react";
 import { StatusBadge } from "./StatusBadge";
 import { QuickNoteModal } from "./QuickNoteModal";

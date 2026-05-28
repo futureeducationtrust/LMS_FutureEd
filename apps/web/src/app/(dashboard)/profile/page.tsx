@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
-import { getInitials, formatDate } from "@/lib/utils";
+import { getInitials } from "@/lib/utils";
 import { Role } from "@lms/types";
 import api from "@/lib/api";
 import { useNotifications } from "@/store/notifications";

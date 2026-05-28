@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { authenticate } from '../../middleware/authenticate'
 import { leadSummarySelect } from './service'
-import { Role } from '@lms/types'
+import { Role, LeadStatus } from '@lms/types'
 
 export async function leadFollowUpsRoute(fastify: FastifyInstance): Promise<void> {
   fastify.get('/followups', { preHandler: authenticate }, async (request, reply) => {
@@ -9,7 +9,7 @@ export async function leadFollowUpsRoute(fastify: FastifyInstance): Promise<void
     const now = new Date()
     const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-    const excludedStatuses = ['CONFIRMED', 'DUPLICATE', 'LOST']
+    const excludedStatuses: LeadStatus[] = [LeadStatus.CONFIRMED, LeadStatus.DUPLICATE, LeadStatus.LOST]
 
     // Employees see only their own leads; admins/sub-admins see the whole branch
     const scopeWhere =

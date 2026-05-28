@@ -12,11 +12,9 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/store/auth";
 import { useNotifications } from "@/store/notifications";
-import { StatusBadge } from "@/components/leads/StatusBadge";
 import api from "@/lib/api";
 import { extractApiError } from "@/lib/utils";
 import { Role } from "@lms/types";
@@ -45,8 +43,7 @@ type ImportResult = {
   errors: Array<{ rowIndex: number; reason: string }>;
 };
 
-const REQUIRED_COLUMNS = ["studentName", "phone"];
-// Replace COLUMN_MAP with this expanded version
+// COLUMN_MAP maps spreadsheet headers to internal field names
 const COLUMN_MAP: Record<string, string> = {
   // Student name variations
   "student name": "studentName",
@@ -190,9 +187,7 @@ export default function ImportPage() {
   const [preview, setPreview] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [duplicateActions, setDuplicateActions] = useState<
-    Record<number, "skip" | "merge">
-  >({});
+  const [duplicateActions] = useState<Record<number, "skip" | "merge">>({});
 
   useEffect(() => {
     if (user && user.role === Role.EMPLOYEE) router.replace("/dashboard");

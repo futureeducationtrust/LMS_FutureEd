@@ -8,7 +8,7 @@ import api from "@/lib/api";
 // Called once on app mount
 // Attempts to restore session using httpOnly cookie
 export function useAuthInit(): { isLoading: boolean } {
-  const { setAuth, clearAuth, setLoading, isLoading } = useAuthStore();
+  const { setAuth, clearAuth, isLoading } = useAuthStore();
 
   useEffect(() => {
     async function restoreSession() {
@@ -37,20 +37,18 @@ export function useAuthInit(): { isLoading: boolean } {
             email: user.email,
             role: user.role,
             branchId: user.branchId,
-            branch: user.branch,
+            ...(user.branch ? { branch: user.branch } : {}),
           },
           accessToken,
         );
       } catch {
         // No valid cookie / session expired — user goes to login
         clearAuth();
-      } finally {
-        setLoading(false);
       }
     }
 
     void restoreSession();
-  }, [setAuth, clearAuth, setLoading]);
+  }, [setAuth, clearAuth]);
 
   return { isLoading };
 }

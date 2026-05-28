@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { useState } from "react";
 import { useAuthStore } from "@/store/auth";
-import { Role } from "@lms/types";
 
 const LAST_SEEN_KEY = "lms_notif_seen";
 
@@ -19,7 +18,7 @@ function buildMessage(
   item: any,
   category: string,
   userId: string,
-  role: string,
+  _role: string,
 ): string {
   switch (category) {
     case "assignment": {

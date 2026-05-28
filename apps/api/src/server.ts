@@ -44,9 +44,9 @@ export async function buildServer() {
       // Allow non-browser (e.g., server-to-server) requests with no origin
       if (!origin) return cb(null, true);
       if (allowedOrigins.length === 0)
-        return cb(new Error("CORS origin not configured"));
+        return cb(new Error("CORS origin not configured"), false);
       if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS"));
+      return cb(new Error("Not allowed by CORS"), false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

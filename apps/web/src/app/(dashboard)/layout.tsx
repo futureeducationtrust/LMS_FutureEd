@@ -7,7 +7,6 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { PageSpinner } from "@/components/ui/Spinner";
-import { cn } from "@/lib/utils";
 
 export default function DashboardLayout({
   children,

@@ -1,6 +1,4 @@
 import { config } from "../config";
-import path from "path";
-import fs from "fs/promises";
 import {
   S3Client,
   PutObjectCommand,

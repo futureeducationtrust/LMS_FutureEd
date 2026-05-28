@@ -2,32 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Bell,
-  X,
-  CheckCheck,
-  ArrowRightLeft,
-  Phone,
-  MessageSquare,
-  UserCheck,
-} from "lucide-react";
+import { Bell, X, CheckCheck } from "lucide-react";
 import { useNotificationFeed } from "@/hooks/useNotificationFeed";
 import { formatTimeAgo } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-
-const TYPE_ICONS: Record<string, React.ElementType> = {
-  STATUS_CHANGED: ArrowRightLeft,
-  CALL: Phone,
-  NOTE: MessageSquare,
-  assignment: UserCheck,
-};
 
 export function NotificationPanel() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const { items, unreadCount, isLoading, markAllRead } = useNotificationFeed();
 
-  function handleClick(item: { leadId: string }) {
+  function handleClick(item: { leadId: string | null }) {
+    if (!item.leadId) return;
     setOpen(false);
     router.push(`/leads/${item.leadId}`);
   }

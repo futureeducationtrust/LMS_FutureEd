@@ -10,7 +10,6 @@ import {
   UserX,
   UserCheck,
   CheckSquare,
-  Users,
   Building2,
 } from "lucide-react";
 import {
@@ -29,7 +28,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Role } from "@lms/types";
-import { getInitials, formatDate, extractApiError } from "@/lib/utils";
+import { getInitials, formatDate } from "@/lib/utils";
 import api from "@/lib/api";
 import { useNotifications } from "@/store/notifications";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,7 +66,7 @@ export default function EmployeesPage() {
   const { user } = useAuthStore();
   const router = useRouter();
   const qc = useQueryClient();
-  const { success, error } = useNotifications();
+  const { success } = useNotifications();
 
   // Filters
   const [filters, setFilters] = useState({

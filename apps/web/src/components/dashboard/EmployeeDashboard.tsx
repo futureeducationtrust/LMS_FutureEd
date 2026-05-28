@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { Users, CheckCircle2, Clock, TrendingUp } from "lucide-react";
 import { StatCard } from "./StatCard";
 import { FollowUpsDueToday } from "./FollowUpsDueToday";

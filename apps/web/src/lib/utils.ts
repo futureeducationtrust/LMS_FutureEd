@@ -1,5 +1,4 @@
 import axios from "axios";
-import type { AxiosError } from "axios";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import dayjs from "dayjs";
