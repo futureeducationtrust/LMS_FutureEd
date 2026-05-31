@@ -20,6 +20,7 @@ import {
   invalidateActivityCache,
 } from "../../services/cache";
 import { QUEUES } from "../../plugins/bullmq";
+import { findDuplicateLeads } from "./service";
 
 export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
   // Order matters — specific routes before parameterized routes
@@ -27,6 +28,26 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(overdueLeadsRoute);
   await fastify.register(leadFollowUpsRoute);
   await fastify.register(bulkLeadRoutes);
+
+  // GET /leads/check-duplicate?phone=XXXXXXXXXX
+  // Exact-match lookup used by the new-lead form for instant duplicate detection.
+  // No pagination — returns all exact matches for the given phone number.
+  fastify.get(
+    "/check-duplicate",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { phone } = request.query as { phone?: string };
+      if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: "INVALID_PHONE", message: "Provide a valid 10-digit Indian mobile number" },
+        });
+      }
+      const leads = await findDuplicateLeads({ phone, email: null, prisma: fastify.prisma });
+      return reply.status(200).send({ success: true, data: { leads } });
+    },
+  );
+
   await fastify.register(leadListRoute);
   await fastify.register(createLeadRoute);
 

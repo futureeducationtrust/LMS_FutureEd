@@ -90,14 +90,13 @@ export default function NewLeadPage() {
     setCheckingDuplicate(true);
     phoneTimerRef.current = setTimeout(async () => {
       try {
-        const { data } = await api.get(
-          `/leads?search=${form.phone}&pageSize=20`,
-        );
+        // Exact-match endpoint — no pagination, guaranteed to find any duplicate
+        const { data } = await api.get(`/leads/check-duplicate?phone=${form.phone}`);
         const leads = data?.data?.leads as
-          | Array<{ id: string; studentName: string; phone: string; status: string }>
+          | Array<{ id: string; studentName: string; phone: string; status: string; isDuplicate: boolean }>
           | undefined;
-        // Only flag as duplicate if the phone matches exactly
-        const match = leads?.find((l) => l.phone === form.phone);
+        // Show the first non-duplicate lead (the original, not a dup-of-dup)
+        const match = leads?.find((l) => !l.isDuplicate) ?? leads?.[0];
         if (match) {
           setDuplicateLead({
             id: match.id,
