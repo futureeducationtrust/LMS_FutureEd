@@ -16,6 +16,7 @@ import { LeadStatus } from "@lms/types";
 type FormState = {
   aadharNo: string;
   apaarId: string;
+  fatherName: string;
   motherName: string;
   motherOccupation: string;
   motherIncome: string;
@@ -75,6 +76,7 @@ const emptyAcademic: AcademicRow = { stream: "", institution: "", board: "", pas
 
 const emptyForm: FormState = {
   aadharNo: "", apaarId: "",
+  fatherName: "",
   motherName: "", motherOccupation: "", motherIncome: "",
   fatherOccupation: "", fatherIncome: "",
   noOfSisters: "", noOfBrothers: "",
@@ -279,6 +281,7 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
     setForm({
       aadharNo: app.aadharNo ?? "",
       apaarId: app.apaarId ?? "",
+      fatherName: (app as Record<string, unknown>)["fatherName"] as string ?? "",
       motherName: app.motherName ?? "",
       motherOccupation: app.motherOccupation ?? "",
       motherIncome: String(app.motherIncome ?? ""),
@@ -444,6 +447,7 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
       {/* Family */}
       <Section title="Family Background">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Father's Name" placeholder="Father's full name" {...f("fatherName")} />
           <Field label="Mother's Name" {...f("motherName")} />
           <Field label="Mother's Occupation" {...f("motherOccupation")} />
           <Field label="Mother's Annual Income (₹)" type="number" {...f("motherIncome")} />

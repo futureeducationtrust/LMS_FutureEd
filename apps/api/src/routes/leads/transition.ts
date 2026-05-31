@@ -140,13 +140,33 @@ export async function transitionLeadRoute(
           },
         });
 
-        // Create ConfirmedApplication record when confirmed
+        // Create ConfirmedApplication record when confirmed, generate IDs
         if (isConfirming) {
           await tx.confirmedApplication.upsert({
             where: { leadId: id },
             update: {},
             create: { leadId: id },
           });
+
+          // Only generate IDs if not already assigned
+          const existing = await tx.confirmedApplication.findUnique({
+            where: { leadId: id },
+            select: { admissionId: true, fileNumber: true },
+          });
+
+          if (!existing?.admissionId) {
+            const year = new Date().getFullYear();
+            const totalCount = await tx.confirmedApplication.count();
+            const yearCount = await tx.confirmedApplication.count({
+              where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+            });
+            const admissionId = `S${String(totalCount + 1).padStart(4, "0")}`;
+            const fileNumber = `${yearCount + 1}/${year}`;
+            await tx.confirmedApplication.update({
+              where: { leadId: id },
+              data: { admissionId, fileNumber },
+            });
+          }
         }
       });
 

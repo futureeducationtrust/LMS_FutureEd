@@ -451,6 +451,13 @@ model ConfirmedApplication {
   extraCurricular String?
   authorisedBy    String?
 
+  // Father's name (collected on admission form, separate from lead.fatherName)
+  fatherName  String?
+
+  // Auto-generated IDs assigned when lead becomes CONFIRMED
+  fileNumber  String?  @unique  // e.g. 11/2026 (sequential per branch per year)
+  admissionId String?  @unique  // e.g. S0001 (global sequential)
+
   // Admission form tracking
   isFormComplete     Boolean   @default(false)
   sentToStudentAt    DateTime?

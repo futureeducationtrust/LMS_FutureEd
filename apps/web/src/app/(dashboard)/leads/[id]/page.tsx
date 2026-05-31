@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dayjs from "dayjs";
-import { ArrowLeft, User, Clock } from "lucide-react";
+import { ArrowLeft, User, Clock, Pencil } from "lucide-react";
 import { useLeadDetail, useLeadInteractions } from "@/hooks/useLeadDetail";
 import { InteractionTimeline } from "@/components/leads/InteractionTimeline";
 import { AddInteractionForm } from "@/components/leads/AddInteractionForm";
@@ -101,6 +101,12 @@ export default function LeadDetailPage() {
               </span>
             </div>
           </div>
+          <Link
+            href={`/leads/${id}/edit`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors"
+          >
+            <Pencil size={13} /> Edit
+          </Link>
         </div>
       </div>
 

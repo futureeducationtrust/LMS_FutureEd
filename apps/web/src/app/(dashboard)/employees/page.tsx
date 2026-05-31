@@ -11,6 +11,7 @@ import {
   UserCheck,
   CheckSquare,
   Building2,
+  Pencil,
 } from "lucide-react";
 import {
   useUsers,
@@ -88,6 +89,13 @@ export default function EmployeesPage() {
   const [deactivatePreview, setDeactivatePreview] =
     useState<DeactivatePreview | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [editModal, setEditModal] = useState<{
+    id: string;
+    name: string;
+    phone: string;
+    role: string;
+  } | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -196,6 +204,25 @@ export default function EmployeesPage() {
     setBulkBranchId("");
     void qc.invalidateQueries({ queryKey: ["users"] });
     setBulkLoading(false);
+  }
+
+  async function handleEditSave() {
+    if (!editModal) return;
+    setEditLoading(true);
+    try {
+      await api.patch(`/users/${editModal.id}`, {
+        name: editModal.name.trim(),
+        phone: editModal.phone.trim() || undefined,
+        role: editModal.role || undefined,
+      });
+      success("Employee updated");
+      setEditModal(null);
+      void qc.invalidateQueries({ queryKey: ["users"] });
+    } catch {
+      success("Failed to update employee");
+    } finally {
+      setEditLoading(false);
+    }
   }
 
   if (!user || user.role === Role.EMPLOYEE) return null;
@@ -386,7 +413,7 @@ export default function EmployeesPage() {
                         {/* Employee info */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
                               <span className="text-xs font-bold text-primary">
                                 {getInitials(u.name)}
                               </span>
@@ -437,6 +464,22 @@ export default function EmployeesPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             <button
+                              type="button"
+                              onClick={() =>
+                                setEditModal({
+                                  id: u.id,
+                                  name: u.name,
+                                  phone: u.phone ?? "",
+                                  role: u.role,
+                                })
+                              }
+                              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Edit Employee"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() =>
                                 setResetModal({ id: u.id, name: u.name })
                               }
@@ -449,6 +492,7 @@ export default function EmployeesPage() {
                             {user.role === Role.ADMIN &&
                               (u.isActive ? (
                                 <button
+                                  type="button"
                                   onClick={() =>
                                     void handleDeactivateClick(u.id, u.name)
                                   }
@@ -459,6 +503,7 @@ export default function EmployeesPage() {
                                 </button>
                               ) : (
                                 <button
+                                  type="button"
                                   onClick={() =>
                                     void activate.mutateAsync(u.id)
                                   }
@@ -703,6 +748,7 @@ export default function EmployeesPage() {
             {branches.map((branch: Branch) => (
               <button
                 key={branch.id}
+                type="button"
                 onClick={() => setBulkBranchId(branch.id)}
                 className={cn(
                   "w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-colors",
@@ -712,7 +758,7 @@ export default function EmployeesPage() {
                 )}
                 aria-label={`Select ${branch.name} branch${branch.city ? ` in ${branch.city}` : ""}`}
               >
-                <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center shrink-0">
                   <Building2 size={14} className="text-primary" />
                 </div>
                 <div className="flex-1 text-left">
@@ -728,6 +774,61 @@ export default function EmployeesPage() {
             ))}
           </div>
         </div>
+      </Modal>
+
+      {/* ── Edit Employee Modal ── */}
+      <Modal
+        open={!!editModal}
+        onClose={() => setEditModal(null)}
+        title={`Edit Employee — ${editModal?.name}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setEditModal(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleEditSave()}
+              loading={editLoading}
+              disabled={!editModal?.name.trim()}
+            >
+              Save Changes
+            </Button>
+          </>
+        }
+      >
+        {editModal && (
+          <div className="space-y-4">
+            <Input
+              label="Full Name"
+              value={editModal.name}
+              onChange={(e) => setEditModal((p) => p ? { ...p, name: e.target.value } : p)}
+              placeholder="Employee full name"
+            />
+            <Input
+              label="Phone"
+              value={editModal.phone}
+              onChange={(e) => setEditModal((p) => p ? { ...p, phone: e.target.value } : p)}
+              placeholder="10-digit mobile number"
+              inputMode="numeric"
+              maxLength={10}
+            />
+            {user.role === Role.ADMIN && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
+                <select
+                  value={editModal.role}
+                  onChange={(e) => setEditModal((p) => p ? { ...p, role: e.target.value } : p)}
+                  aria-label="Employee role"
+                  className="w-full px-3 py-2.5 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="SUB_ADMIN">Sub Admin</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

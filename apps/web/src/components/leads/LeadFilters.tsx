@@ -10,6 +10,9 @@ import type { LeadFilters } from "@/hooks/useLeads";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 4 }, (_, i) => CURRENT_YEAR - i);
+
 type Props = {
   filters: LeadFilters;
   onChange: (filters: LeadFilters) => void;
@@ -20,6 +23,17 @@ export function LeadFilters({ filters, onChange, onReset }: Props) {
   const { user } = useAuthStore();
   const isManager = user?.role === Role.ADMIN || user?.role === Role.SUB_ADMIN;
   const [showMore, setShowMore] = useState(false);
+
+  const selectedYear = filters.dateFrom?.slice(0, 4) ?? "";
+
+  function handleYearChange(year: string) {
+    if (!year) {
+      const { dateFrom: _df, dateTo: _dt, ...rest } = filters;
+      onChange({ ...rest, page: 1 });
+    } else {
+      onChange({ ...filters, dateFrom: `${year}-01-01`, dateTo: `${year}-12-31`, page: 1 });
+    }
+  }
 
   // Fetch reference data
   const { data: sources } = useQuery({
@@ -214,31 +228,36 @@ export function LeadFilters({ filters, onChange, onReset }: Props) {
             </select>
           )}
 
-          {/* Date from */}
-          <input
-            type="date"
-            value={filters.dateFrom ?? ""}
-            aria-label="Filter from date"
-            title="Filter from date"
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value) {
-                onChange({
-                  ...filters,
-                  dateFrom: value,
-                  page: 1,
-                });
-                return;
-              }
-
-              const { dateFrom: _dateFrom, ...rest } = filters;
-              onChange({
-                ...rest,
-                page: 1,
-              });
-            }}
+          {/* Year quick filter */}
+          <select
+            value={selectedYear}
+            aria-label="Filter by year"
+            title="Filter by year"
+            onChange={(e) => handleYearChange(e.target.value)}
             className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-          />
+          >
+            <option value="">All Years</option>
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={String(y)}>{y}</option>
+            ))}
+          </select>
+
+          {/* Date from (custom range) */}
+          {!selectedYear && (
+            <input
+              type="date"
+              value={filters.dateFrom ?? ""}
+              aria-label="Filter from date"
+              title="Filter from date"
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value) { onChange({ ...filters, dateFrom: value, page: 1 }); return; }
+                const { dateFrom: _dateFrom, ...rest } = filters;
+                onChange({ ...rest, page: 1 });
+              }}
+              className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+            />
+          )}
         </div>
       )}
     </div>

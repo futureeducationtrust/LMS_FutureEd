@@ -557,12 +557,29 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       await fastify.prisma.$transaction(async (tx) => {
+        // Generate admissionId / fileNumber if not yet assigned
+        const existingApp = await tx.confirmedApplication.findUnique({
+          where: { leadId: id },
+          select: { admissionId: true, fileNumber: true },
+        });
+        const idUpdates: Record<string, unknown> = {};
+        if (!existingApp?.admissionId) {
+          const year = new Date().getFullYear();
+          const totalCount = await tx.confirmedApplication.count();
+          const yearCount = await tx.confirmedApplication.count({
+            where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+          });
+          idUpdates["admissionId"] = `S${String(totalCount + 1).padStart(4, "0")}`;
+          idUpdates["fileNumber"] = `${yearCount + 1}/${year}`;
+        }
+
         await tx.confirmedApplication.update({
           where: { leadId: id },
           data: {
             sentToStudentAt: new Date(),
             sentToStudentEmail: lead.email,
             isFormComplete: true,
+            ...idUpdates,
           },
         });
 

@@ -96,6 +96,7 @@ export function EmployeeDashboard() {
             value={myTotal}
             subtitle={`${active} active`}
             icon={<Users size={16} className="text-primary" />}
+            href="/leads"
           />
           <StatCard
             title="Confirmed"
@@ -103,6 +104,7 @@ export function EmployeeDashboard() {
             subtitle={confirmed === 0 ? "Keep going!" : "Great work!"}
             icon={<CheckCircle2 size={16} className="text-green-600" />}
             iconBg="bg-green-50"
+            href="/leads?status=CONFIRMED"
           />
           <StatCard
             title="Overdue Follow-ups"
@@ -110,6 +112,7 @@ export function EmployeeDashboard() {
             subtitle={overdueCount === 0 ? "All caught up" : "Need action"}
             icon={<Clock size={16} className="text-amber-600" />}
             iconBg="bg-amber-50"
+            href="/leads?overdue=true"
           />
           <StatCard
             title="Conversion Rate"
@@ -117,6 +120,7 @@ export function EmployeeDashboard() {
             subtitle={`${lost} lost leads`}
             icon={<TrendingUp size={16} className="text-indigo-600" />}
             iconBg="bg-indigo-50"
+            href="/leads"
           />
         </div>
       )}
@@ -159,7 +163,7 @@ export function EmployeeDashboard() {
                         {lead.phone}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <StatusBadge
                         status={lead.status as LeadStatus}
                         size="sm"

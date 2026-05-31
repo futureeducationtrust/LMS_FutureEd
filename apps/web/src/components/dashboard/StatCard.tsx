@@ -1,4 +1,5 @@
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
   icon: React.ReactNode;
   iconBg?: string;
   loading?: boolean;
+  href?: string;
 };
 
 export function StatCard({
@@ -19,7 +21,10 @@ export function StatCard({
   icon,
   iconBg = "bg-primary-50",
   loading,
+  href,
 }: Props) {
+  const router = useRouter();
+
   if (loading) {
     return (
       <div className="bg-white border border-surface-200 rounded-xl p-5 animate-pulse">
@@ -31,7 +36,13 @@ export function StatCard({
   }
 
   return (
-    <div className="bg-white border border-surface-200 rounded-xl p-5 hover:shadow-sm transition-shadow">
+    <div
+      onClick={href ? () => router.push(href) : undefined}
+      className={cn(
+        "bg-white border border-surface-200 rounded-xl p-5 hover:shadow-sm transition-shadow",
+        href && "cursor-pointer hover:border-primary-300",
+      )}
+    >
       <div className="flex items-start justify-between mb-3">
         <p className="text-xs font-medium text-gray-500">{title}</p>
         <div

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -69,6 +69,37 @@ export default function NewLeadPage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [duplicateHint, setDuplicateHint] = useState<{ id: string; name: string } | null>(null);
+
+  // Debounced duplicate check
+  const phoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (phoneTimerRef.current) clearTimeout(phoneTimerRef.current);
+    if (!form.phone.match(/^[6-9]\d{9}$/)) { setDuplicateHint(null); return; }
+    phoneTimerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/leads?search=${form.phone}&pageSize=1`);
+        const lead = data?.data?.leads?.[0];
+        if (lead) setDuplicateHint({ id: lead.id, name: lead.studentName });
+        else setDuplicateHint(null);
+      } catch { setDuplicateHint(null); }
+    }, 500);
+  }, [form.phone]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (emailTimerRef.current) clearTimeout(emailTimerRef.current);
+    const emailVal = form.email.trim();
+    if (!emailVal || !emailVal.includes("@")) { if (!form.phone.match(/^[6-9]\d{9}$/)) setDuplicateHint(null); return; }
+    emailTimerRef.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/leads?search=${encodeURIComponent(emailVal)}&pageSize=1`);
+        const lead = data?.data?.leads?.[0];
+        if (lead) setDuplicateHint({ id: lead.id, name: lead.studentName });
+      } catch { /* ignore */ }
+    }, 500);
+  }, [form.email]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch courses and sources
   const { data: courses } = useQuery({
@@ -102,8 +133,6 @@ export default function NewLeadPage() {
       errs["phone"] = "Enter valid 10-digit Indian number";
     if (!form.studentName.trim())
       errs["studentName"] = "Student name is required";
-    if (!form.dateOfBirth) errs["dateOfBirth"] = "Date of birth is required";
-    if (!form.fatherName.trim()) errs["fatherName"] = "Father name is required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -212,7 +241,7 @@ export default function NewLeadPage() {
         {/* Step 1 — Required */}
         <div className="bg-white border border-surface-200 rounded-xl p-5 space-y-4">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Basic Information *
+            Basic Information
           </p>
 
           <Input
@@ -225,6 +254,16 @@ export default function NewLeadPage() {
             maxLength={10}
             inputMode="numeric"
           />
+          {duplicateHint && (
+            <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              <span>
+                Possible duplicate: <strong>{duplicateHint.name}</strong> already exists with this phone/email.{" "}
+                <button type="button" onClick={() => router.push(`/leads/${duplicateHint.id}`)}
+                  className="underline font-semibold hover:text-amber-900">View lead →</button>
+              </span>
+            </div>
+          )}
           <Input
             label="Student Name"
             required
@@ -236,7 +275,6 @@ export default function NewLeadPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Date of Birth"
-              required
               type="date"
               value={form.dateOfBirth}
               onChange={(e) => set("dateOfBirth", e.target.value)}
@@ -244,7 +282,6 @@ export default function NewLeadPage() {
             />
             <Input
               label="Father's Name"
-              required
               placeholder="Father's full name"
               value={form.fatherName}
               onChange={(e) => set("fatherName", e.target.value)}

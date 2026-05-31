@@ -45,6 +45,7 @@ export function AdminDashboard() {
           subtitle="vs last period"
           icon={<Users size={16} className="text-primary" />}
           loading={isLoading}
+          href="/leads"
         />
         <StatCard
           title="Confirmed Today"
@@ -53,6 +54,7 @@ export function AdminDashboard() {
           icon={<CheckCircle2 size={16} className="text-green-600" />}
           iconBg="bg-green-50"
           loading={isLoading}
+          href="/admissions"
         />
         <StatCard
           title="Pending Follow-ups"
@@ -61,6 +63,7 @@ export function AdminDashboard() {
           icon={<AlertTriangle size={16} className="text-amber-600" />}
           iconBg="bg-amber-50"
           loading={isLoading}
+          href="/leads?overdue=true"
         />
         <StatCard
           title="Leads This Month"
@@ -69,6 +72,7 @@ export function AdminDashboard() {
           icon={<TrendingUp size={16} className="text-indigo-600" />}
           iconBg="bg-indigo-50"
           loading={isLoading}
+          href="/leads"
         />
         <StatCard
           title="Conversion Rate"
@@ -76,6 +80,7 @@ export function AdminDashboard() {
           subtitle="this period"
           icon={<CheckCircle2 size={16} className="text-primary" />}
           loading={isLoading}
+          href="/admissions"
         />
       </div>
 
