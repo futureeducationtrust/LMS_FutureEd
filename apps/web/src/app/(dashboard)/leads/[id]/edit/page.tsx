@@ -59,7 +59,7 @@ export default function EditLeadPage() {
       dateOfBirth: lead.dateOfBirth ? String(lead.dateOfBirth).split("T")[0]! : "",
       fatherName: lead.fatherName ?? "",
       courseIds: lead.courses?.map((c: { course: { id: string } }) => c.course.id) ?? [],
-      sourceId: (lead.source as { id?: string } | null)?.id ?? "",
+      sourceId: lead.sourceId ?? "",
       sourceOther: lead.sourceOther ?? "",
       qualification: lead.qualification ?? "",
       schoolCollege: lead.schoolCollege ?? "",
@@ -140,7 +140,7 @@ export default function EditLeadPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <button onClick={() => router.back()}
+        <button type="button" onClick={() => router.back()}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-3">
           <ArrowLeft size={14} /> Back
         </button>
