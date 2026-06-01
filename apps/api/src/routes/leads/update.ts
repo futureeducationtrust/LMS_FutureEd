@@ -56,7 +56,7 @@ export async function updateLeadRoute(fastify: FastifyInstance): Promise<void> {
       }
       const body = validation.data;
 
-      // Strip fields that cannot be updated via this endpoint
+      // Pull out fields that need special handling or must not reach lead.update()
       const {
         id: _id,
         status: _status,
@@ -67,24 +67,47 @@ export async function updateLeadRoute(fastify: FastifyInstance): Promise<void> {
         duplicateOfId: _dupOf,
         confirmedAt: _conf,
         confirmedById: _confBy,
-        ...updateData
+        courseIds,           // handled separately via LeadCourse
+        dateOfBirth,         // needs Date conversion
+        nextFollowUpAt,      // needs Date conversion
+        ...rest
       } = body as Record<string, unknown>;
+
+      // Build the Prisma-safe update payload
+      const leadData: Record<string, unknown> = { ...rest };
+      if (dateOfBirth !== undefined) {
+        leadData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth as string) : null;
+      }
+      if (nextFollowUpAt !== undefined) {
+        leadData.nextFollowUpAt = nextFollowUpAt ? new Date(nextFollowUpAt as string) : null;
+      }
 
       const updated = await fastify.prisma.$transaction(async (tx) => {
         const updatedLead = await tx.lead.update({
           where: { id },
-          data: updateData as any,
+          data: leadData as any,
         });
+
+        // Update courses if provided
+        if (Array.isArray(courseIds)) {
+          await tx.leadCourse.deleteMany({ where: { leadId: id } });
+          if (courseIds.length > 0) {
+            await tx.leadCourse.createMany({
+              data: (courseIds as string[]).map((courseId, index) => ({
+                leadId: id,
+                courseId,
+                isPrimary: index === 0,
+              })),
+            });
+          }
+        }
 
         await tx.auditLog.create({
           data: {
             leadId: id,
             userId,
             action: "LEAD_UPDATED",
-            newValue: updateData as Record<
-              string,
-              string | number | boolean | null
-            >,
+            newValue: leadData as Record<string, string | number | boolean | null>,
           },
         });
 
