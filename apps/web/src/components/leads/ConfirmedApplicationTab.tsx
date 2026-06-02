@@ -11,6 +11,7 @@ import {
   Send,
   Plus,
   X,
+  Loader2,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -40,6 +41,7 @@ type FormState = {
   nationality: string;
   religion: string;
   category: string;
+  postalAddress: string;
   permanentAddress: string;
   permanentPhone: string;
   localGuardianName: string;
@@ -116,6 +118,7 @@ const emptyForm: FormState = {
   nationality: "Indian",
   religion: "",
   category: "",
+  postalAddress: "",
   permanentAddress: "",
   permanentPhone: "",
   localGuardianName: "",
@@ -429,6 +432,7 @@ export function ConfirmedApplicationTab({
     { examName: "", rollNo: "", score: "", rank: "" },
   ]);
   const [saving, setSaving] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(mode === "edit");
 
   const isInterested = leadStatus === LeadStatus.INTERESTED;
@@ -455,6 +459,7 @@ export function ConfirmedApplicationTab({
       nationality: app.nationality ?? "Indian",
       religion: app.religion ?? "",
       category: app.category ?? "",
+      postalAddress: ((app as Record<string, unknown>)["postalAddress"] as string) ?? "",
       permanentAddress: app.permanentAddress ?? "",
       permanentPhone: app.permanentPhone ?? "",
       localGuardianName: app.localGuardianName ?? "",
@@ -594,6 +599,7 @@ export function ConfirmedApplicationTab({
   }
 
   async function handleExportPDF() {
+    setPdfLoading(true);
     try {
       const response = await api.get(`/leads/${leadId}/confirmed/pdf`, {
         responseType: "arraybuffer",
@@ -612,6 +618,8 @@ export function ConfirmedApplicationTab({
       toast.success("PDF downloaded");
     } catch {
       toast.error("Failed to generate PDF");
+    } finally {
+      setPdfLoading(false);
     }
   }
 
@@ -650,9 +658,15 @@ export function ConfirmedApplicationTab({
         <button
           type="button"
           onClick={() => void handleExportPDF()}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors"
+          disabled={pdfLoading}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Download size={14} /> Export PDF
+          {pdfLoading ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Download size={14} />
+          )}
+          {pdfLoading ? "Generating..." : "Export PDF"}
         </button>
       </div>
 
@@ -740,6 +754,27 @@ export function ConfirmedApplicationTab({
       {/* Addresses */}
       <Section title="Addresses">
         <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Postal Address
+            </label>
+            {readOnly ? (
+              <div className="w-full min-h-14 px-3 py-2 rounded-lg border border-surface-200 bg-surface-50 text-sm text-gray-700 whitespace-pre-wrap">
+                {(form.postalAddress ?? "").trim() || "—"}
+              </div>
+            ) : (
+              <textarea
+                title="Postal Address"
+                placeholder="Enter current / postal address"
+                value={form.postalAddress ?? ""}
+                rows={2}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, postalAddress: e.target.value }))
+                }
+                className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary resize-none"
+              />
+            )}
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Permanent Address

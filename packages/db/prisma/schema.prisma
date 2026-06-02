@@ -429,6 +429,7 @@ model ConfirmedApplication {
   category         String?
 
   // Addresses
+  postalAddress        String?
   permanentAddress     String?
   permanentPhone       String?
   localGuardianName    String?

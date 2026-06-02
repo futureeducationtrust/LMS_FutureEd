@@ -39,13 +39,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Leads", href: "/leads", icon: Users },
   {
-    label: "Admissions",
+    label: "Interested Lead",
     href: "/admissions",
     icon: FileText,
     roles: [Role.ADMIN, Role.SUB_ADMIN, Role.EMPLOYEE],
   },
   {
-    label: "Confirmed Leads",
+    label: "Admissions",
     href: "/confirmed",
     icon: CheckCircle2,
     roles: [Role.ADMIN, Role.SUB_ADMIN, Role.EMPLOYEE],
@@ -111,20 +111,25 @@ export function Sidebar({ onClose }: Props) {
       )}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-surface-200">
-        <div className="shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-white">
+      <div
+        className={cn(
+          "flex border-b border-surface-200 px-4 py-4",
+          collapsed ? "items-center justify-center" : "flex-col items-center gap-2",
+        )}
+      >
+        <div className={cn("rounded-xl overflow-hidden bg-white shrink-0", collapsed ? "w-8 h-8" : "w-14 h-14")}>
           <Image
             src="/logo.jpg"
             alt="Future Education Trust"
-            width={32}
-            height={32}
-            className="w-8 h-8 object-contain"
+            width={collapsed ? 32 : 56}
+            height={collapsed ? 32 : 56}
+            className="w-full h-full object-contain"
             priority
           />
         </div>
         {!collapsed && (
-          <div>
-            <p className="text-sm font-bold text-gray-900">Future Education</p>
+          <div className="text-center">
+            <p className="text-sm font-bold text-gray-900 leading-tight">Future Education</p>
             <p className="text-xs text-gray-500">LMS</p>
           </div>
         )}
