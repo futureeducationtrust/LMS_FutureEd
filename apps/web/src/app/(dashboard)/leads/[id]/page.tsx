@@ -57,7 +57,9 @@ export default function LeadDetailPage() {
   }
 
   const hasAdmissionTab =
-    lead.status === LeadStatus.CONFIRMED || lead.status === LeadStatus.INTERESTED;
+    lead.status === LeadStatus.CONFIRMED ||
+    lead.status === LeadStatus.INTERESTED;
+
   const tabs: Array<{ key: Tab; label: string }> = [
     { key: "overview", label: "Overview & Timeline" },
     ...(hasAdmissionTab
@@ -67,7 +69,6 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-5">
-      {/* Back + header */}
       <div>
         <button
           onClick={() => router.back()}
@@ -101,21 +102,28 @@ export default function LeadDetailPage() {
               </span>
             </div>
           </div>
-          <Link
-            href={`/leads/${id}/edit`}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors"
-          >
-            <Pencil size={13} /> Edit
-          </Link>
+
+          {activeTab === "overview" ? (
+            <Link
+              href={`/leads/${id}/edit`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors"
+            >
+              <Pencil size={13} /> Edit
+            </Link>
+          ) : (
+            <div className="text-xs text-gray-400">
+              Use the form Edit button
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tabs */}
       {tabs.length > 1 && (
         <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit">
           {tabs.map((tab) => (
             <button
               key={tab.key}
+              type="button"
               onClick={() => setActiveTab(tab.key)}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
@@ -131,16 +139,17 @@ export default function LeadDetailPage() {
       )}
 
       {activeTab === "confirmed" ? (
-        /* Confirmed application — full width */
         <div className="bg-white border border-surface-200 rounded-xl p-6">
-          <ConfirmedApplicationTab leadId={id} leadStatus={lead.status} />
+          <ConfirmedApplicationTab
+            leadId={id}
+            leadStatus={lead.status}
+            mode={lead.status === LeadStatus.CONFIRMED ? "view" : "edit"}
+            confirmOnSave={lead.status !== LeadStatus.CONFIRMED}
+          />
         </div>
       ) : (
-        /* Overview — 2 column layout */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: student info + timeline */}
           <div className="lg:col-span-2 space-y-5">
-            {/* Student info card */}
             <div className="bg-white border border-surface-200 rounded-xl p-5">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
                 Student Information
@@ -177,10 +186,8 @@ export default function LeadDetailPage() {
               </div>
             </div>
 
-            {/* Add interaction form */}
             <AddInteractionForm leadId={id} />
 
-            {/* Timeline */}
             <div className="bg-white border border-surface-200 rounded-xl p-5">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-5">
                 Activity Timeline
@@ -192,7 +199,6 @@ export default function LeadDetailPage() {
             </div>
           </div>
 
-          {/* Right: sidebar */}
           <div>
             <LeadSidebar lead={lead} />
           </div>

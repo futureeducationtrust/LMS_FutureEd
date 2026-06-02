@@ -19,14 +19,13 @@ export default function AdmissionsPage() {
   const { user } = useAuthStore();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [tab, setTab] = useState<"INTERESTED" | "CONFIRMED">("INTERESTED");
   const [year, setYear] = useState("");
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admissions-leads", page, search, tab, year],
+    queryKey: ["admissions-leads", page, search, year],
     queryFn: async () => {
       const params = new URLSearchParams({
-        status: tab,
+        status: "INTERESTED",
         page: String(page),
         pageSize: "20",
       });
@@ -55,8 +54,7 @@ export default function AdmissionsPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Admissions</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {tab === "INTERESTED" ? "In-progress admissions" : "Confirmed admissions"}
-            {data && ` · ${data.total} total`}
+            In-progress admissions{data && ` · ${data.total} total`}
           </p>
         </div>
         <button
@@ -70,32 +68,37 @@ export default function AdmissionsPage() {
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-surface-100 p-1 rounded-xl w-fit">
-        {(["INTERESTED", "CONFIRMED"] as const).map((t) => (
-          <button key={t} type="button"
-            onClick={() => { setTab(t); setPage(1); }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
-            {t === "INTERESTED" ? "In Progress" : "Confirmed"}
-          </button>
-        ))}
-      </div>
-
       <div className="bg-white border border-surface-200 rounded-xl p-4 flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+          />
           <input
             placeholder="Search by name, phone, father name..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary"
           />
         </div>
-        <select value={year} onChange={(e) => { setYear(e.target.value); setPage(1); }}
+        <select
+          value={year}
+          onChange={(e) => {
+            setYear(e.target.value);
+            setPage(1);
+          }}
           aria-label="Filter by year"
-          className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white">
+          className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+        >
           <option value="">All Years</option>
-          {YEAR_OPTIONS.map((y) => <option key={y} value={String(y)}>{y}</option>)}
+          {YEAR_OPTIONS.map((y) => (
+            <option key={y} value={String(y)}>
+              {y}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -117,7 +120,6 @@ export default function AdmissionsPage() {
                     "Student",
                     "Phone",
                     "Course",
-                    ...(tab === "CONFIRMED" ? ["File No.", "Adm. ID"] : []),
                     ...(user?.role !== Role.EMPLOYEE ? ["Counsellor"] : []),
                     "Added",
                     "Form Status",
@@ -159,18 +161,6 @@ export default function AdmissionsPage() {
                         {lead.courses?.find((c: any) => c.isPrimary)?.course
                           ?.name ?? "—"}
                       </td>
-                      {tab === "CONFIRMED" && (
-                        <>
-                          <td className="px-4 py-3 text-xs font-mono text-gray-700 whitespace-nowrap">
-                            {lead.confirmedApplication?.fileNumber
-                              ? <span className="font-semibold">FILE No: {lead.confirmedApplication.fileNumber}</span>
-                              : <span className="text-gray-400">—</span>}
-                          </td>
-                          <td className="px-4 py-3 text-xs font-mono text-gray-700">
-                            {lead.confirmedApplication?.admissionId ?? <span className="text-gray-400">—</span>}
-                          </td>
-                        </>
-                      )}
                       {user?.role !== Role.EMPLOYEE && (
                         <td className="px-4 py-3 text-xs text-gray-600">
                           {lead.assignedTo?.name ?? (

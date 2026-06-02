@@ -19,17 +19,26 @@ export const leadSummarySelect = {
   source: { select: { id: true, name: true } },
   assignedTo: { select: { id: true, name: true, email: true, role: true } },
   createdBy: { select: { id: true, name: true } },
+  fatherName: true,
   courses: {
     select: {
       isPrimary: true,
       course: { select: { id: true, name: true } },
     },
   },
+  confirmedApplication: {
+    select: {
+      admissionId: true,
+      fileNumber: true,
+      sentToStudentAt: true,
+      sentToStudentEmail: true,
+      isFormComplete: true,
+    },
+  },
 } as const
 
 export const leadDetailSelect = {
   ...leadSummarySelect,
-  fatherName: true,
   dateOfBirth: true,
   alternatePhone: true,
   whatsappNumber: true,

@@ -69,6 +69,11 @@ export type ConfirmedApplication = {
   dueDate: Date | null
   extraCurricular: string | null
   authorisedBy: string | null
+  admissionId: string | null
+  fileNumber: string | null
+  isFormComplete: boolean
+  sentToStudentAt: Date | null
+  sentToStudentEmail: string | null
   academicRecords: AcademicRecord[]
   entranceExams: EntranceExamDetail[]
   documents: LeadDocument[]

@@ -1,9 +1,22 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { Download, Save, Upload, FileText, Check, Eye, Send, Plus, X } from "lucide-react";
+import {
+  Download,
+  Save,
+  Upload,
+  FileText,
+  Check,
+  Eye,
+  Send,
+  Plus,
+  X,
+} from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useConfirmedApplication, useUpdateConfirmedApplication } from "@/hooks/useLeadDetail";
+import {
+  useConfirmedApplication,
+  useUpdateConfirmedApplication,
+} from "@/hooks/useLeadDetail";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/Badge";
@@ -55,7 +68,12 @@ type AcademicRow = {
   grade: string;
 };
 
-type ExamRow = { examName: string; rollNo: string; score: string; rank: string };
+type ExamRow = {
+  examName: string;
+  rollNo: string;
+  score: string;
+  rank: string;
+};
 
 type Document = {
   id: string;
@@ -65,6 +83,8 @@ type Document = {
   fileUrl: string;
 };
 
+type AdmissionMode = "edit" | "view";
+
 const QUAL_LEVELS = [
   { key: "TENTH", label: "Matric / X Std." },
   { key: "TWELFTH", label: "Inter / XII Std." },
@@ -72,49 +92,108 @@ const QUAL_LEVELS = [
   { key: "POST_GRADUATION", label: "PG / Equivalent" },
 ] as const;
 
-const emptyAcademic: AcademicRow = { stream: "", institution: "", board: "", passingYear: "", percentage: "", grade: "" };
+const emptyAcademic: AcademicRow = {
+  stream: "",
+  institution: "",
+  board: "",
+  passingYear: "",
+  percentage: "",
+  grade: "",
+};
 
 const emptyForm: FormState = {
-  aadharNo: "", apaarId: "",
+  aadharNo: "",
+  apaarId: "",
   fatherName: "",
-  motherName: "", motherOccupation: "", motherIncome: "",
-  fatherOccupation: "", fatherIncome: "",
-  noOfSisters: "", noOfBrothers: "",
-  nationality: "Indian", religion: "", category: "",
-  permanentAddress: "", permanentPhone: "",
-  localGuardianName: "", localGuardianAddress: "", localGuardianPhone: "",
-  bookingAmount: "", bookingCashDDNo: "", bookingBank: "", bookingDate: "",
-  admissionAmount: "", admissionCashDDNo: "", admissionBank: "", admissionDate: "",
-  duesAmount: "", dueDate: "",
-  extraCurricular: "", authorisedBy: "",
+  motherName: "",
+  motherOccupation: "",
+  motherIncome: "",
+  fatherOccupation: "",
+  fatherIncome: "",
+  noOfSisters: "",
+  noOfBrothers: "",
+  nationality: "Indian",
+  religion: "",
+  category: "",
+  permanentAddress: "",
+  permanentPhone: "",
+  localGuardianName: "",
+  localGuardianAddress: "",
+  localGuardianPhone: "",
+  bookingAmount: "",
+  bookingCashDDNo: "",
+  bookingBank: "",
+  bookingDate: "",
+  admissionAmount: "",
+  admissionCashDDNo: "",
+  admissionBank: "",
+  admissionDate: "",
+  duesAmount: "",
+  dueDate: "",
+  extraCurricular: "",
+  authorisedBy: "",
 };
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{title}</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        {title}
+      </p>
       {children}
     </div>
   );
 }
 
 function Field({
-  label, value, onChange, type = "text", placeholder,
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  readOnly = false,
 }: {
-  label: string; value: string; onChange: (v: string) => void;
-  type?: string; placeholder?: string;
+  label: string;
+  value: string;
+  onChange?: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+  readOnly?: boolean;
 }) {
+  const displayValue = value.trim() || "—";
+
+  if (readOnly) {
+    return (
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          {label}
+        </label>
+        <div className="w-full min-h-10 px-3 py-2 rounded-lg border border-surface-200 bg-surface-50 text-sm text-gray-700 flex items-center">
+          {displayValue}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        {label}
+      </label>
       <input
         type={type}
         title={label}
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange?.(e.target.value)}
         className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary"
       />
     </div>
@@ -122,9 +201,15 @@ function Field({
 }
 
 function DocumentUploadSection({
-  confirmedApplicationId, leadId, documents,
+  confirmedApplicationId,
+  leadId,
+  documents,
+  readOnly = false,
 }: {
-  confirmedApplicationId: string; leadId: string; documents: Document[];
+  confirmedApplicationId: string;
+  leadId: string;
+  documents: Document[];
+  readOnly?: boolean;
 }) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -135,7 +220,11 @@ function DocumentUploadSection({
     queryKey: ["document-types"],
     queryFn: async () => {
       const { data } = await api.get("/settings/documents");
-      return data.data as Array<{ id: string; name: string; isRequired: boolean }>;
+      return data.data as Array<{
+        id: string;
+        name: string;
+        isRequired: boolean;
+      }>;
     },
     staleTime: 5 * 60_000,
   });
@@ -147,9 +236,13 @@ function DocumentUploadSection({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const { data: uploadData } = await api.post("/upload/document", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data: uploadData } = await api.post(
+        "/upload/document",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
       await api.post(`/leads/${leadId}/confirmed/documents`, {
         documentTypeId: selectedTypeId,
         fileUrl: uploadData.data.url,
@@ -167,60 +260,92 @@ function DocumentUploadSection({
     }
   }
 
-  const uploadedNames = new Set(documents.map((d) => d.documentType?.name).filter(Boolean));
+  const uploadedNames = new Set(
+    documents.map((d) => d.documentType?.name).filter(Boolean),
+  );
   const requiredTypes = docTypes?.filter((t) => t.isRequired) ?? [];
-  const pendingRequired = requiredTypes.filter((t) => !uploadedNames.has(t.name));
+  const pendingRequired = requiredTypes.filter(
+    (t) => !uploadedNames.has(t.name),
+  );
 
   return (
     <Section title="Documents">
       <div className="space-y-3">
         {pendingRequired.length > 0 && (
-          <Badge variant="warning">{pendingRequired.length} required pending</Badge>
+          <Badge variant="warning">
+            {pendingRequired.length} required pending
+          </Badge>
         )}
-        <div className="flex gap-2">
-          <select
-            value={selectedTypeId}
-            onChange={(e) => setSelectedTypeId(e.target.value)}
-            title="Select document type"
-            className="flex-1 px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-          >
-            <option value="">Select document type...</option>
-            {docTypes?.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}{t.isRequired ? " *" : ""}</option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => selectedTypeId && fileRef.current?.click()}
-            disabled={!selectedTypeId || uploading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
-          >
-            <Upload size={14} />
-            {uploading ? "Uploading..." : "Upload"}
-          </button>
-          <input ref={fileRef} type="file" accept="application/pdf,image/jpeg,image/jpg,image/png"
-            title="Upload document file" onChange={(e) => void handleUpload(e)} className="hidden" />
-        </div>
+        {!readOnly && (
+          <div className="flex gap-2">
+            <select
+              value={selectedTypeId}
+              onChange={(e) => setSelectedTypeId(e.target.value)}
+              title="Select document type"
+              className="flex-1 px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+            >
+              <option value="">Select document type...</option>
+              {docTypes?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.isRequired ? " *" : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => selectedTypeId && fileRef.current?.click()}
+              disabled={!selectedTypeId || uploading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+            >
+              <Upload size={14} />
+              {uploading ? "Uploading..." : "Upload"}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/pdf,image/jpeg,image/jpg,image/png"
+              title="Upload document file"
+              onChange={(e) => void handleUpload(e)}
+              className="hidden"
+            />
+          </div>
+        )}
 
         {documents.length > 0 ? (
           <div className="space-y-2">
             {documents.map((doc) => (
-              <div key={doc.id} className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200">
+              <div
+                key={doc.id}
+                className="flex items-center gap-3 p-3 bg-surface-50 rounded-lg border border-surface-200"
+              >
                 <div className="w-8 h-8 bg-white rounded-lg border border-surface-200 flex items-center justify-center shrink-0">
                   <FileText size={14} className="text-gray-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-700 truncate">{doc.fileName}</p>
-                  <p className="text-xs text-gray-400">{doc.documentType?.name}</p>
+                  <p className="text-sm font-medium text-gray-700 truncate">
+                    {doc.fileName}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {doc.documentType?.name}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {doc.isVerified ? (
-                    <Badge variant="success"><Check size={10} className="mr-1" />Verified</Badge>
+                    <Badge variant="success">
+                      <Check size={10} className="mr-1" />
+                      Verified
+                    </Badge>
                   ) : (
                     <Badge variant="warning">Pending</Badge>
                   )}
-                  <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
-                    className="p-1.5 text-gray-400 hover:text-primary rounded-lg transition-colors" title="View">
+                  <a
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 text-gray-400 hover:text-primary rounded-lg transition-colors"
+                    title="View"
+                  >
                     <Eye size={14} />
                   </a>
                 </div>
@@ -228,22 +353,39 @@ function DocumentUploadSection({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400 text-center py-4">No documents uploaded yet</p>
+          <p className="text-sm text-gray-400 text-center py-4">
+            No documents uploaded yet
+          </p>
         )}
 
         {requiredTypes.length > 0 && (
           <div className="p-3 bg-surface-50 rounded-lg border border-surface-200">
-            <p className="text-xs font-semibold text-gray-500 mb-2">Required Documents</p>
+            <p className="text-xs font-semibold text-gray-500 mb-2">
+              Required Documents
+            </p>
             <div className="space-y-1.5">
               {requiredTypes.map((t) => {
-                const uploaded = documents.some((d) => d.documentType?.name === t.name);
+                const uploaded = documents.some(
+                  (d) => d.documentType?.name === t.name,
+                );
                 return (
                   <div key={t.id} className="flex items-center gap-2">
-                    <div className={cn("w-4 h-4 rounded-full flex items-center justify-center shrink-0",
-                      uploaded ? "bg-green-500" : "bg-surface-200")}>
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded-full flex items-center justify-center shrink-0",
+                        uploaded ? "bg-green-500" : "bg-surface-200",
+                      )}
+                    >
                       {uploaded && <Check size={10} className="text-white" />}
                     </div>
-                    <span className={cn("text-xs", uploaded ? "text-green-700" : "text-gray-500")}>{t.name}</span>
+                    <span
+                      className={cn(
+                        "text-xs",
+                        uploaded ? "text-green-700" : "text-gray-500",
+                      )}
+                    >
+                      {t.name}
+                    </span>
                   </div>
                 );
               })}
@@ -257,9 +399,19 @@ function DocumentUploadSection({
 
 // ── Main component ──────────────────────────────────────────────────────────
 
-type Props = { leadId: string; leadStatus?: string };
+type Props = {
+  leadId: string;
+  leadStatus?: LeadStatus;
+  mode?: AdmissionMode;
+  confirmOnSave?: boolean;
+};
 
-export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
+export function ConfirmedApplicationTab({
+  leadId,
+  leadStatus,
+  mode = "edit",
+  confirmOnSave = false,
+}: Props) {
   const { data: app, isLoading } = useConfirmedApplication(leadId, true);
   const updateApp = useUpdateConfirmedApplication(leadId);
   const qc = useQueryClient();
@@ -271,17 +423,26 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
     GRADUATION: { ...emptyAcademic },
     POST_GRADUATION: { ...emptyAcademic },
   });
-  const [exams, setExams] = useState<ExamRow[]>([{ examName: "", rollNo: "", score: "", rank: "" }]);
-  const [sending, setSending] = useState(false);
+  const [exams, setExams] = useState<ExamRow[]>([
+    { examName: "", rollNo: "", score: "", rank: "" },
+  ]);
+  const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(mode === "edit");
 
   const isInterested = leadStatus === LeadStatus.INTERESTED;
+  const readOnly = mode === "view" && !isEditing;
+
+  useEffect(() => {
+    setIsEditing(mode === "edit");
+  }, [mode, leadId]);
 
   useEffect(() => {
     if (!app) return;
     setForm({
       aadharNo: app.aadharNo ?? "",
       apaarId: app.apaarId ?? "",
-      fatherName: (app as Record<string, unknown>)["fatherName"] as string ?? "",
+      fatherName:
+        ((app as Record<string, unknown>)["fatherName"] as string) ?? "",
       motherName: app.motherName ?? "",
       motherOccupation: app.motherOccupation ?? "",
       motherIncome: String(app.motherIncome ?? ""),
@@ -300,52 +461,77 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
       bookingAmount: String(app.bookingAmount ?? ""),
       bookingCashDDNo: app.bookingCashDDNo ?? "",
       bookingBank: app.bookingBank ?? "",
-      bookingDate: app.bookingDate ? (String(app.bookingDate).split("T")[0] ?? "") : "",
+      bookingDate: app.bookingDate
+        ? (String(app.bookingDate).split("T")[0] ?? "")
+        : "",
       admissionAmount: String(app.admissionAmount ?? ""),
       admissionCashDDNo: app.admissionCashDDNo ?? "",
       admissionBank: app.admissionBank ?? "",
-      admissionDate: app.admissionDate ? (String(app.admissionDate).split("T")[0] ?? "") : "",
+      admissionDate: app.admissionDate
+        ? (String(app.admissionDate).split("T")[0] ?? "")
+        : "",
       duesAmount: String(app.duesAmount ?? ""),
       dueDate: app.dueDate ? (String(app.dueDate).split("T")[0] ?? "") : "",
       extraCurricular: app.extraCurricular ?? "",
       authorisedBy: app.authorisedBy ?? "",
     });
 
+    const nextAcademic = {
+      TENTH: { ...emptyAcademic },
+      TWELFTH: { ...emptyAcademic },
+      GRADUATION: { ...emptyAcademic },
+      POST_GRADUATION: { ...emptyAcademic },
+    };
+
     if (app.academicRecords?.length) {
-      const next = { TENTH: { ...emptyAcademic }, TWELFTH: { ...emptyAcademic }, GRADUATION: { ...emptyAcademic }, POST_GRADUATION: { ...emptyAcademic } };
       for (const rec of app.academicRecords as any[]) {
-        if (next[rec.level as keyof typeof next]) {
-          next[rec.level as keyof typeof next] = {
-            stream: rec.stream ?? "", institution: rec.institution ?? "",
-            board: rec.board ?? "", passingYear: String(rec.passingYear ?? ""),
-            percentage: String(rec.percentage ?? ""), grade: rec.grade ?? "",
+        if (nextAcademic[rec.level as keyof typeof nextAcademic]) {
+          nextAcademic[rec.level as keyof typeof nextAcademic] = {
+            stream: rec.stream ?? "",
+            institution: rec.institution ?? "",
+            board: rec.board ?? "",
+            passingYear: String(rec.passingYear ?? ""),
+            percentage: String(rec.percentage ?? ""),
+            grade: rec.grade ?? "",
           };
         }
       }
-      setAcademic(next);
     }
+    setAcademic(nextAcademic);
 
     if (app.entranceExams?.length) {
-      setExams((app.entranceExams as any[]).map((e) => ({
-        examName: e.examName ?? "", rollNo: e.rollNo ?? "",
-        score: e.score ?? "", rank: String(e.rank ?? ""),
-      })));
+      setExams(
+        (app.entranceExams as any[]).map((e) => ({
+          examName: e.examName ?? "",
+          rollNo: e.rollNo ?? "",
+          score: e.score ?? "",
+          rank: String(e.rank ?? ""),
+        })),
+      );
     }
   }, [app]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function f(field: keyof FormState) {
-    return { value: form[field], onChange: (v: string) => setForm((p) => ({ ...p, [field]: v })) };
+    return {
+      value: form[field],
+      onChange: (v: string) => setForm((p) => ({ ...p, [field]: v })),
+      readOnly,
+    };
   }
 
-  async function saveAll() {
+  async function persist(confirmAfterSave: boolean) {
     const payload: Record<string, unknown> = {
       ...form,
       motherIncome: form.motherIncome ? Number(form.motherIncome) : undefined,
       fatherIncome: form.fatherIncome ? Number(form.fatherIncome) : undefined,
       noOfSisters: form.noOfSisters ? Number(form.noOfSisters) : undefined,
       noOfBrothers: form.noOfBrothers ? Number(form.noOfBrothers) : undefined,
-      bookingAmount: form.bookingAmount ? Number(form.bookingAmount) : undefined,
-      admissionAmount: form.admissionAmount ? Number(form.admissionAmount) : undefined,
+      bookingAmount: form.bookingAmount
+        ? Number(form.bookingAmount)
+        : undefined,
+      admissionAmount: form.admissionAmount
+        ? Number(form.admissionAmount)
+        : undefined,
       duesAmount: form.duesAmount ? Number(form.duesAmount) : undefined,
       bookingDate: form.bookingDate || undefined,
       admissionDate: form.admissionDate || undefined,
@@ -357,52 +543,61 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
     const academicRecords = Object.entries(academic)
       .filter(([, r]) => r.institution || r.board || r.percentage)
       .map(([level, r]) => ({
-        level, stream: r.stream || undefined, institution: r.institution || undefined,
+        level,
+        stream: r.stream || undefined,
+        institution: r.institution || undefined,
         board: r.board || undefined,
         passingYear: r.passingYear ? Number(r.passingYear) : undefined,
         percentage: r.percentage ? Number(r.percentage) : undefined,
         grade: r.grade || undefined,
       }));
-    await api.post(`/leads/${leadId}/confirmed/academic`, { records: academicRecords });
+    await api.post(`/leads/${leadId}/confirmed/academic`, {
+      records: academicRecords,
+    });
 
     const examRecords = exams
       .filter((e) => e.examName)
       .map((e) => ({
-        examName: e.examName, rollNo: e.rollNo || undefined,
-        score: e.score || undefined, rank: e.rank ? Number(e.rank) : undefined,
+        examName: e.examName,
+        rollNo: e.rollNo || undefined,
+        score: e.score || undefined,
+        rank: e.rank ? Number(e.rank) : undefined,
       }));
     await api.post(`/leads/${leadId}/confirmed/exams`, { exams: examRecords });
+
+    if (confirmAfterSave) {
+      await api.post(`/leads/${leadId}/send-admission`);
+      void qc.invalidateQueries({ queryKey: ["lead", leadId] });
+    }
+
+    void qc.invalidateQueries({ queryKey: ["confirmed", leadId] });
   }
 
   async function handleSave() {
+    setSaving(true);
     try {
-      await saveAll();
-      void qc.invalidateQueries({ queryKey: ["confirmed", leadId] });
-      toast.success("Form saved");
-    } catch (e) {
-      toast.error(extractApiError(e));
-    }
-  }
-
-  async function handleSendApplication() {
-    setSending(true);
-    try {
-      await saveAll();
-      await api.post(`/leads/${leadId}/send-admission`);
-      void qc.invalidateQueries({ queryKey: ["lead", leadId] });
-      void qc.invalidateQueries({ queryKey: ["confirmed", leadId] });
-      toast.success("Application sent and lead confirmed!");
+      await persist(mode === "edit" ? confirmOnSave : false);
+      toast.success(
+        confirmOnSave ? "Application saved and confirmed" : "Form saved",
+      );
+      if (mode === "view") {
+        setIsEditing(false);
+      }
     } catch (e) {
       toast.error(extractApiError(e));
     } finally {
-      setSending(false);
+      setSaving(false);
     }
   }
 
   async function handleExportPDF() {
     try {
-      const response = await api.get(`/leads/${leadId}/confirmed/pdf`, { responseType: "arraybuffer" });
-      const blob = new Blob([response.data as ArrayBuffer], { type: "application/pdf" });
+      const response = await api.get(`/leads/${leadId}/confirmed/pdf`, {
+        responseType: "arraybuffer",
+      });
+      const blob = new Blob([response.data as ArrayBuffer], {
+        type: "application/pdf",
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -420,46 +615,119 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
   if (isLoading) {
     return (
       <div className="space-y-3 animate-pulse">
-        {[1, 2, 3, 4].map((i) => <div key={i} className="h-12 bg-surface-100 rounded-lg" />)}
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-12 bg-surface-100 rounded-lg" />
+        ))}
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="text-base font-semibold text-gray-800">Admission Assistance Form</h3>
-        <button type="button" onClick={() => void handleExportPDF()}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors">
+        <div className="flex items-center gap-3">
+          <h3 className="text-base font-semibold text-gray-800">
+            Admission Application
+          </h3>
+          {readOnly ? (
+            <span className="text-xs rounded-full px-2 py-0.5 border border-surface-200 text-gray-500 bg-surface-50">
+              Read only
+            </span>
+          ) : (
+            <span className="text-xs rounded-full px-2 py-0.5 border border-primary-200 text-primary bg-primary-50">
+              Editing
+            </span>
+          )}
+          {isInterested && !readOnly && (
+            <span className="text-xs rounded-full px-2 py-0.5 border border-amber-200 text-amber-700 bg-amber-50">
+              Will confirm on save
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleExportPDF()}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-200 text-sm text-gray-600 hover:border-primary hover:text-primary transition-colors"
+        >
           <Download size={14} /> Export PDF
         </button>
       </div>
 
+      {/* Application IDs — shown only after confirmed */}
+      {(app?.admissionId || app?.fileNumber) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg border border-primary-200 bg-primary-50">
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Admission ID</p>
+            <p className="text-lg font-bold text-primary tracking-wide">
+              {app.admissionId ?? "—"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">File Number</p>
+            <p className="text-lg font-bold text-gray-800">
+              {app.fileNumber ?? "—"}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Identity */}
       <Section title="Identity Documents">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Aadhar Number" placeholder="12-digit Aadhar" {...f("aadharNo")} />
-          <Field label="Apaar / ABC ID" placeholder="Apaar ID" {...f("apaarId")} />
+          <Field
+            label="Aadhar Number"
+            placeholder="12-digit Aadhar"
+            {...f("aadharNo")}
+          />
+          <Field
+            label="Apaar / ABC ID"
+            placeholder="Apaar ID"
+            {...f("apaarId")}
+          />
         </div>
       </Section>
 
       {/* Family */}
       <Section title="Family Background">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Father's Name" placeholder="Father's full name" {...f("fatherName")} />
-          <Field label="Mother's Name" {...f("motherName")} />
-          <Field label="Mother's Occupation" {...f("motherOccupation")} />
-          <Field label="Mother's Annual Income (₹)" type="number" {...f("motherIncome")} />
-          <Field label="Father's Occupation" {...f("fatherOccupation")} />
-          <Field label="Father's Annual Income (₹)" type="number" {...f("fatherIncome")} />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="No. of Sisters" type="number" {...f("noOfSisters")} />
-            <Field label="Brothers" type="number" {...f("noOfBrothers")} />
+        <div className="space-y-4">
+          {/* Father */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-surface-100">
+            <Field
+              label="Father's Name"
+              placeholder="Father's full name"
+              {...f("fatherName")}
+            />
+            <Field label="Father's Occupation" {...f("fatherOccupation")} />
+            <Field
+              label="Father's Annual Income (₹)"
+              type="number"
+              {...f("fatherIncome")}
+            />
           </div>
-          <Field label="Nationality" {...f("nationality")} />
-          <Field label="Religion" {...f("religion")} />
-          <Field label="Category" placeholder="General / OBC / SC / ST" {...f("category")} />
+          {/* Mother */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-surface-100">
+            <Field label="Mother's Name" {...f("motherName")} />
+            <Field label="Mother's Occupation" {...f("motherOccupation")} />
+            <Field
+              label="Mother's Annual Income (₹)"
+              type="number"
+              {...f("motherIncome")}
+            />
+          </div>
+          {/* Other */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="No. of Sisters" type="number" {...f("noOfSisters")} />
+              <Field label="No. of Brothers" type="number" {...f("noOfBrothers")} />
+            </div>
+            <Field label="Nationality" {...f("nationality")} />
+            <Field label="Religion" {...f("religion")} />
+            <Field
+              label="Category"
+              placeholder="General / OBC / SC / ST"
+              {...f("category")}
+            />
+          </div>
         </div>
       </Section>
 
@@ -467,21 +735,52 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
       <Section title="Addresses">
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Permanent Address</label>
-            <textarea title="Permanent Address" placeholder="Enter permanent address"
-              value={form.permanentAddress} rows={2}
-              onChange={(e) => setForm((p) => ({ ...p, permanentAddress: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary resize-none" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Permanent Address
+            </label>
+            {readOnly ? (
+              <div className="w-full min-h-14 px-3 py-2 rounded-lg border border-surface-200 bg-surface-50 text-sm text-gray-700 whitespace-pre-wrap">
+                {form.permanentAddress.trim() || "—"}
+              </div>
+            ) : (
+              <textarea
+                title="Permanent Address"
+                placeholder="Enter permanent address"
+                value={form.permanentAddress}
+                rows={2}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, permanentAddress: e.target.value }))
+                }
+                className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary resize-none"
+              />
+            )}
           </div>
           <Field label="Permanent Phone" {...f("permanentPhone")} />
           <Field label="Local Guardian's Name" {...f("localGuardianName")} />
           <Field label="Local Guardian's Phone" {...f("localGuardianPhone")} />
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Local Guardian's Address</label>
-            <textarea title="Local Guardian's Address" placeholder="Enter local guardian's address"
-              value={form.localGuardianAddress} rows={2}
-              onChange={(e) => setForm((p) => ({ ...p, localGuardianAddress: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary resize-none" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Local Guardian's Address
+            </label>
+            {readOnly ? (
+              <div className="w-full min-h-14 px-3 py-2 rounded-lg border border-surface-200 bg-surface-50 text-sm text-gray-700 whitespace-pre-wrap">
+                {form.localGuardianAddress.trim() || "—"}
+              </div>
+            ) : (
+              <textarea
+                title="Local Guardian's Address"
+                placeholder="Enter local guardian's address"
+                value={form.localGuardianAddress}
+                rows={2}
+                onChange={(e) =>
+                  setForm((p) => ({
+                    ...p,
+                    localGuardianAddress: e.target.value,
+                  }))
+                }
+                className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary resize-none"
+              />
+            )}
           </div>
         </div>
       </Section>
@@ -492,8 +791,21 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-surface-50">
-                {["Level", "Stream/Subjects", "Institution", "Board/University", "Year", "Marks%", "Grade"].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500 border border-surface-200">{h}</th>
+                {[
+                  "Level",
+                  "Stream/Subjects",
+                  "Institution",
+                  "Board/University",
+                  "Year",
+                  "Marks%",
+                  "Grade",
+                ].map((h) => (
+                  <th
+                    key={h}
+                    className="px-3 py-2 text-left font-semibold text-gray-500 border border-surface-200"
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -502,16 +814,42 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
                 const rec = academic[key]!;
                 return (
                   <tr key={key}>
-                    <td className="px-3 py-2 border border-surface-200 font-medium text-gray-700 whitespace-nowrap bg-surface-50">{label}</td>
-                    {(["stream", "institution", "board", "passingYear", "percentage", "grade"] as const).map((field) => (
+                    <td className="px-3 py-2 border border-surface-200 font-medium text-gray-700 whitespace-nowrap bg-surface-50">
+                      {label}
+                    </td>
+                    {(
+                      [
+                        "stream",
+                        "institution",
+                        "board",
+                        "passingYear",
+                        "percentage",
+                        "grade",
+                      ] as const
+                    ).map((field) => (
                       <td key={field} className="border border-surface-200 p-0">
-                        <input
-                          value={rec[field]}
-                          title={`${label} – ${field}`}
-                          type={field === "passingYear" || field === "percentage" ? "number" : "text"}
-                          onChange={(e) => setAcademic((p) => ({ ...p, [key]: { ...p[key]!, [field]: e.target.value } }))}
-                          className="w-full px-2 py-2 text-xs outline-none focus:bg-primary-50 focus:ring-1 focus:ring-primary"
-                        />
+                        {readOnly ? (
+                          <div className="px-2 py-2 text-xs text-gray-700 bg-white min-h-8">
+                            {rec[field].trim() || "—"}
+                          </div>
+                        ) : (
+                          <input
+                            value={rec[field]}
+                            title={`${label} – ${field}`}
+                            type={
+                              field === "passingYear" || field === "percentage"
+                                ? "number"
+                                : "text"
+                            }
+                            onChange={(e) =>
+                              setAcademic((p) => ({
+                                ...p,
+                                [key]: { ...p[key]!, [field]: e.target.value },
+                              }))
+                            }
+                            className="w-full px-2 py-2 text-xs outline-none focus:bg-primary-50 focus:ring-1 focus:ring-primary"
+                          />
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -527,41 +865,97 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
         <div className="space-y-3">
           {exams.map((exam, i) => (
             <div key={i} className="grid grid-cols-4 gap-3 items-end">
-              <Field label={i === 0 ? "Exam Name" : ""} placeholder="e.g. JEE Main"
-                value={exam.examName} onChange={(v) => { const n = [...exams]; n[i] = { ...n[i]!, examName: v }; setExams(n); }} />
-              <Field label={i === 0 ? "Roll No." : ""} value={exam.rollNo}
-                onChange={(v) => { const n = [...exams]; n[i] = { ...n[i]!, rollNo: v }; setExams(n); }} />
-              <Field label={i === 0 ? "Score" : ""} value={exam.score}
-                onChange={(v) => { const n = [...exams]; n[i] = { ...n[i]!, score: v }; setExams(n); }} />
+              <Field
+                label={i === 0 ? "Exam Name" : ""}
+                placeholder="e.g. JEE Main"
+                value={exam.examName}
+                readOnly={readOnly}
+                onChange={(v) => {
+                  const n = [...exams];
+                  n[i] = { ...n[i]!, examName: v };
+                  setExams(n);
+                }}
+              />
+              <Field
+                label={i === 0 ? "Roll No." : ""}
+                value={exam.rollNo}
+                readOnly={readOnly}
+                onChange={(v) => {
+                  const n = [...exams];
+                  n[i] = { ...n[i]!, rollNo: v };
+                  setExams(n);
+                }}
+              />
+              <Field
+                label={i === 0 ? "Score" : ""}
+                value={exam.score}
+                readOnly={readOnly}
+                onChange={(v) => {
+                  const n = [...exams];
+                  n[i] = { ...n[i]!, score: v };
+                  setExams(n);
+                }}
+              />
               <div className="flex gap-2 items-end">
                 <div className="flex-1">
-                  <Field label={i === 0 ? "Rank" : ""} type="number" value={exam.rank}
-                    onChange={(v) => { const n = [...exams]; n[i] = { ...n[i]!, rank: v }; setExams(n); }} />
+                  <Field
+                    label={i === 0 ? "Rank" : ""}
+                    type="number"
+                    value={exam.rank}
+                    readOnly={readOnly}
+                    onChange={(v) => {
+                      const n = [...exams];
+                      n[i] = { ...n[i]!, rank: v };
+                      setExams(n);
+                    }}
+                  />
                 </div>
-                {exams.length > 1 && (
-                  <button type="button" title="Remove exam" onClick={() => setExams(exams.filter((_, j) => j !== i))}
-                    className="mb-0.5 p-2 text-gray-400 hover:text-red-500 rounded-lg border border-surface-200">
+                {!readOnly && exams.length > 1 && (
+                  <button
+                    type="button"
+                    title="Remove exam"
+                    onClick={() => setExams(exams.filter((_, j) => j !== i))}
+                    className="mb-0.5 p-2 text-gray-400 hover:text-red-500 rounded-lg border border-surface-200"
+                  >
                     <X size={12} />
                   </button>
                 )}
               </div>
             </div>
           ))}
-          <button type="button" onClick={() => setExams([...exams, { examName: "", rollNo: "", score: "", rank: "" }])}
-            className="flex items-center gap-1.5 text-xs text-primary hover:underline">
-            <Plus size={12} /> Add another exam
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() =>
+                setExams([
+                  ...exams,
+                  { examName: "", rollNo: "", score: "", rank: "" },
+                ])
+              }
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <Plus size={12} /> Add another exam
+            </button>
+          )}
         </div>
       </Section>
 
       {/* Payment */}
       <Section title="Payment Details (Office Use)">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Field label="Booking Amount (₹)" type="number" {...f("bookingAmount")} />
+          <Field
+            label="Booking Amount (₹)"
+            type="number"
+            {...f("bookingAmount")}
+          />
           <Field label="Cash/DD No." {...f("bookingCashDDNo")} />
           <Field label="Bank" {...f("bookingBank")} />
           <Field label="Booking Date" type="date" {...f("bookingDate")} />
-          <Field label="Admission Amount (₹)" type="number" {...f("admissionAmount")} />
+          <Field
+            label="Admission Amount (₹)"
+            type="number"
+            {...f("admissionAmount")}
+          />
           <Field label="Cash/DD No." {...f("admissionCashDDNo")} />
           <Field label="Bank" {...f("admissionBank")} />
           <Field label="Admission Date" type="date" {...f("admissionDate")} />
@@ -573,7 +967,10 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
       {/* Other */}
       <Section title="Other Details">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Extra Curricular Activities" {...f("extraCurricular")} />
+          <Field
+            label="Extra Curricular Activities"
+            {...f("extraCurricular")}
+          />
           <Field label="Authorised By" {...f("authorisedBy")} />
         </div>
       </Section>
@@ -584,22 +981,46 @@ export function ConfirmedApplicationTab({ leadId, leadStatus }: Props) {
           confirmedApplicationId={app.id}
           leadId={leadId}
           documents={app.documents as Document[]}
+          readOnly={readOnly}
         />
       )}
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-2 border-t border-surface-200">
-        <button type="button" onClick={() => void handleSave()} disabled={updateApp.isPending}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-surface-200 text-sm font-medium text-gray-700 hover:border-primary hover:text-primary disabled:opacity-50 transition-colors">
-          <Save size={14} />
-          {updateApp.isPending ? "Saving..." : "Save Draft"}
-        </button>
+        {mode === "view" && !isEditing && (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-surface-200 text-sm font-medium text-gray-700 hover:border-primary hover:text-primary transition-colors"
+          >
+            <Save size={14} />
+            Edit
+          </button>
+        )}
 
-        {isInterested && (
-          <button type="button" onClick={() => void handleSendApplication()} disabled={sending || updateApp.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors">
+        {mode === "view" && isEditing && (
+          <button
+            type="button"
+            onClick={() => setIsEditing(false)}
+            className="px-5 py-2.5 rounded-lg border border-surface-200 text-sm font-medium text-gray-700 hover:border-primary hover:text-primary transition-colors"
+          >
+            Cancel
+          </button>
+        )}
+
+        {(mode === "edit" || isEditing) && (
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saving || updateApp.isPending}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition-colors"
+          >
             <Send size={14} />
-            {sending ? "Sending..." : "Save & Send Application"}
+            {saving || updateApp.isPending
+              ? "Saving..."
+              : mode === "edit" && confirmOnSave
+                ? "Save & Confirm"
+                : "Save Changes"}
           </button>
         )}
       </div>

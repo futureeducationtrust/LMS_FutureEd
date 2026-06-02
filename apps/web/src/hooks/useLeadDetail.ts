@@ -160,10 +160,17 @@ export function useConfirmedApplication(leadId: string, enabled: boolean) {
   return useQuery({
     queryKey: ["confirmed", leadId],
     queryFn: async () => {
-      const { data } = await api.get<ConfirmedApplicationResponse>(
-        `/leads/${leadId}/confirmed`,
-      );
-      return data.data;
+      try {
+        const { data } = await api.get<ConfirmedApplicationResponse>(
+          `/leads/${leadId}/confirmed`,
+        );
+        return data.data;
+      } catch (error: any) {
+        if (error?.response?.status === 404) {
+          return null;
+        }
+        throw error;
+      }
     },
     enabled,
   });

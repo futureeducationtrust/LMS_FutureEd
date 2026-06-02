@@ -94,6 +94,8 @@ export default function ConfirmedLeadsPage() {
               <thead>
                 <tr className="border-b border-surface-200 bg-surface-50">
                   {[
+                    "Adm ID",
+                    "File No.",
                     "Student",
                     "Phone",
                     "Course",
@@ -118,6 +120,18 @@ export default function ConfirmedLeadsPage() {
 
                   return (
                     <tr key={lead.id} className="hover:bg-surface-50">
+                      <td className="px-4 py-3">
+                        {lead.confirmedApplication?.admissionId ? (
+                          <span className="inline-block px-2 py-0.5 rounded-full bg-primary-50 text-primary text-xs font-semibold border border-primary-200">
+                            {lead.confirmedApplication.admissionId}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-600 font-medium">
+                        {lead.confirmedApplication?.fileNumber ?? "—"}
+                      </td>
                       <td className="px-4 py-3">
                         <p className="text-sm font-semibold text-gray-800">
                           {lead.studentName}
