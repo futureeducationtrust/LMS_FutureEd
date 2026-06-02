@@ -68,7 +68,6 @@ export default function AdmissionFormPage() {
           leadStatus={lead.status}
           mode={isConfirmed ? "view" : "edit"}
           confirmOnSave={!isConfirmed}
-          counsellorName={lead.assignedTo?.name}
         />
       </div>
     </div>
