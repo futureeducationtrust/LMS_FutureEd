@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload,
@@ -26,9 +26,26 @@ type ParsedRow = {
   phone: string;
   email: string | null;
   fatherName: string | null;
+  alternatePhone: string | null;
+  whatsappNumber: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  dateOfBirth: string | null;
   city: string | null;
+  district: string | null;
   state: string | null;
+  village: string | null;
+  sector: string | null;
   qualification: string | null;
+  schoolCollege: string | null;
+  boardUniversity: string | null;
+  passingYear: string | null;
+  percentage: string | null;
+  pcmPcbPercentage: string | null;
+  purpose: string | null;
+  remarks: string | null;
+  course: string | null;
+  source: string | null;
   [key: string]: unknown;
 };
 
@@ -45,14 +62,14 @@ type ImportResult = {
 
 // COLUMN_MAP maps spreadsheet headers to internal field names
 const COLUMN_MAP: Record<string, string> = {
-  // Student name variations
+  // Student name
   "student name": "studentName",
-  studentname: "studentName", // camelCase after toLowerCase()
+  studentname: "studentName",
   name: "studentName",
   candidate: "studentName",
   "candidate name": "studentName",
 
-  // Phone variations
+  // Phone
   phone: "phone",
   mobile: "phone",
   "mobile no": "phone",
@@ -64,6 +81,21 @@ const COLUMN_MAP: Record<string, string> = {
   contact: "phone",
   "contact no": "phone",
 
+  // Alternate phone
+  "alternate phone": "alternatePhone",
+  "alt phone": "alternatePhone",
+  "alternate mobile": "alternatePhone",
+  altphone: "alternatePhone",
+  "phone 2": "alternatePhone",
+  "mobile 2": "alternatePhone",
+
+  // WhatsApp
+  whatsapp: "whatsappNumber",
+  "whatsapp number": "whatsappNumber",
+  "whatsapp no": "whatsappNumber",
+  wp: "whatsappNumber",
+  "wp no": "whatsappNumber",
+
   // Email
   email: "email",
   "email id": "email",
@@ -72,9 +104,25 @@ const COLUMN_MAP: Record<string, string> = {
 
   // Father name
   "father name": "fatherName",
-  fathername: "fatherName", // ← key fix
+  fathername: "fatherName",
   father: "fatherName",
   "father's name": "fatherName",
+
+  // Gender
+  gender: "gender",
+  sex: "gender",
+
+  // Marital status
+  "marital status": "maritalStatus",
+  maritalstatus: "maritalStatus",
+  marital: "maritalStatus",
+
+  // Date of birth
+  dob: "dateOfBirth",
+  "date of birth": "dateOfBirth",
+  dateofbirth: "dateOfBirth",
+  "birth date": "dateOfBirth",
+  birthdate: "dateOfBirth",
 
   // Location
   city: "city",
@@ -82,14 +130,59 @@ const COLUMN_MAP: Record<string, string> = {
   state: "state",
   village: "village",
   address: "village",
+  sector: "sector",
+  "sector/area": "sector",
 
   // Academic
   qualification: "qualification",
   "passing year": "passingYear",
   passingyear: "passingYear",
+  "pass year": "passingYear",
   percentage: "percentage",
   marks: "percentage",
   "marks%": "percentage",
+  "%marks": "percentage",
+  "pcm%": "pcmPcbPercentage",
+  "pcb%": "pcmPcbPercentage",
+  "pcm/pcb": "pcmPcbPercentage",
+  pcmpcb: "pcmPcbPercentage",
+  pcm: "pcmPcbPercentage",
+  pcb: "pcmPcbPercentage",
+  "school/college": "schoolCollege",
+  "school college": "schoolCollege",
+  schoolcollege: "schoolCollege",
+  school: "schoolCollege",
+  college: "schoolCollege",
+  "board/university": "boardUniversity",
+  boarduniversity: "boardUniversity",
+  board: "boardUniversity",
+  university: "boardUniversity",
+
+  // Course
+  course: "course",
+  courses: "course",
+  "course name": "course",
+  "course interest": "course",
+  programme: "course",
+  program: "course",
+
+  // Source
+  source: "source",
+  "lead source": "source",
+  leadsource: "source",
+  "source of enquiry": "source",
+  "how did you hear": "source",
+  reference: "source",
+  "referred by": "source",
+
+  // Other
+  purpose: "purpose",
+  interest: "purpose",
+  remarks: "remarks",
+  notes: "remarks",
+  note: "remarks",
+  comment: "remarks",
+  comments: "remarks",
 };
 
 function parseExcelFile(file: File): Promise<ParsedRow[]> {
@@ -145,11 +238,27 @@ function parseExcelFile(file: File): Promise<ParsedRow[]> {
               pg: "POST_GRADUATION",
               "post graduation": "POST_GRADUATION",
             };
-            const rawQualification = String(parsed["qualification"])
-              .toLowerCase()
-              .trim();
-            parsed["qualification"] =
-              qualMap[rawQualification] ?? parsed["qualification"];
+            const rawQ = String(parsed["qualification"]).toLowerCase().trim();
+            parsed["qualification"] = qualMap[rawQ] ?? parsed["qualification"];
+          }
+
+          if (parsed["gender"]) {
+            const gMap: Record<string, string> = {
+              male: "MALE", m: "MALE",
+              female: "FEMALE", f: "FEMALE",
+              other: "OTHER", o: "OTHER",
+            };
+            const rawG = String(parsed["gender"]).toLowerCase().trim();
+            parsed["gender"] = gMap[rawG] ?? null;
+          }
+
+          if (parsed["maritalStatus"]) {
+            const mMap: Record<string, string> = {
+              single: "SINGLE", unmarried: "SINGLE", s: "SINGLE",
+              married: "MARRIED",
+            };
+            const rawM = String(parsed["maritalStatus"]).toLowerCase().trim();
+            parsed["maritalStatus"] = mMap[rawM] ?? null;
           }
 
           const phone = parsed["phone"]
@@ -188,6 +297,17 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [duplicateActions] = useState<Record<number, "skip" | "merge">>({});
+  const [courses, setCourses] = useState<string[]>([]);
+  const [sources, setSources] = useState<string[]>([]);
+
+  useEffect(() => {
+    api.get("/settings/courses?isActive=true").then(({ data }) => {
+      setCourses((data.data as any[]).map((c: any) => c.name));
+    }).catch(() => {});
+    api.get("/settings/sources").then(({ data }) => {
+      setSources((data.data as any[]).filter((s: any) => s.isActive).map((s: any) => s.name));
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (user && user.role === Role.EMPLOYEE) router.replace("/dashboard");
@@ -230,31 +350,32 @@ export default function ImportPage() {
     }
   }
 
-  function downloadTemplate() {
+  const templateHref = useMemo(() => {
     const ws = XLSX.utils.aoa_to_sheet([
       [
-        "studentName",
-        "phone",
-        "email",
-        "fatherName",
-        "city",
-        "state",
-        "qualification",
+        "student name", "phone", "email", "father name",
+        "alternate phone", "whatsapp", "gender", "marital status",
+        "date of birth", "city", "district", "state", "village", "sector",
+        "qualification", "school/college", "board/university",
+        "passing year", "percentage", "pcm/pcb",
+        "course", "source",
+        "purpose", "remarks",
       ],
       [
-        "John Doe",
-        "9876543210",
-        "john@email.com",
-        "Robert Doe",
-        "Bokaro",
-        "Jharkhand",
-        "TWELFTH",
+        "John Doe", "9876543210", "john@email.com", "Robert Doe",
+        "9876543211", "9876543210", "Male", "Single",
+        "01/01/2005", "Bokaro", "Bokaro", "Jharkhand", "Chas", "Sector 4",
+        "12th", "DAV Public School", "CBSE",
+        "2024", "75", "80",
+        "B.Tech CSE", "Facebook",
+        "Engineering", "Interested in B.Tech CSE",
       ],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Leads");
-    XLSX.writeFile(wb, "lead-import-template.xlsx");
-  }
+    const base64 = XLSX.write(wb, { bookType: "xlsx", type: "base64" }) as string;
+    return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
+  }, []);
 
   const validRows = parsedRows.filter((r) => r.phone && r.studentName);
   const invalidRows = parsedRows.filter((r) => !r.phone || !r.studentName);
@@ -270,11 +391,48 @@ export default function ImportPage() {
             Bulk import student leads from Excel or CSV
           </p>
         </div>
-        <Button variant="secondary" onClick={downloadTemplate}>
+        <a
+          href={templateHref}
+          download="lead-import-template.xlsx"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-200 text-sm font-medium text-gray-600 hover:border-primary hover:text-primary transition-colors"
+        >
           <Download size={14} />
           Download Template
-        </Button>
+        </a>
       </div>
+
+      {/* Course / Source reference */}
+      {(courses.length > 0 || sources.length > 0) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3 text-xs">
+          <p className="font-semibold text-amber-800">
+            Use these exact names in your Excel for Course and Source columns:
+          </p>
+          {courses.length > 0 && (
+            <div>
+              <p className="font-medium text-amber-700 mb-1.5">Courses</p>
+              <div className="flex flex-wrap gap-1.5">
+                {courses.map((c) => (
+                  <span key={c} className="px-2 py-0.5 rounded-full bg-white border border-amber-300 text-amber-900 font-mono">
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {sources.length > 0 && (
+            <div>
+              <p className="font-medium text-amber-700 mb-1.5">Sources</p>
+              <div className="flex flex-wrap gap-1.5">
+                {sources.map((s) => (
+                  <span key={s} className="px-2 py-0.5 rounded-full bg-white border border-amber-300 text-amber-900 font-mono">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Upload zone */}
       {!file && (
@@ -394,17 +552,14 @@ export default function ImportPage() {
                   <thead>
                     <tr className="border-b border-surface-100 bg-surface-50">
                       {[
-                        "#",
-                        "Student Name",
-                        "Phone",
-                        "Email",
-                        "Father Name",
-                        "City",
-                        "Status",
+                        "#", "Student Name", "Phone", "Father Name",
+                        "Email", "City", "State", "Qualification",
+                        "School/College", "Year", "%", "Gender",
+                        "Course", "Source", "Status",
                       ].map((h) => (
                         <th
                           key={h}
-                          className="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide"
+                          className="px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap"
                         >
                           {h}
                         </th>
@@ -414,24 +569,20 @@ export default function ImportPage() {
                   <tbody className="divide-y divide-surface-50">
                     {validRows.slice(0, 10).map((row) => (
                       <tr key={row.rowIndex} className="hover:bg-surface-50">
-                        <td className="px-3 py-2 text-xs text-gray-400">
-                          {row.rowIndex}
-                        </td>
-                        <td className="px-3 py-2 text-sm font-medium text-gray-800">
-                          {row.studentName}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-gray-600">
-                          {row.phone}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-500">
-                          {row.email ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-500">
-                          {row.fatherName ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-500">
-                          {row.city ?? "—"}
-                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-400">{row.rowIndex}</td>
+                        <td className="px-3 py-2 text-sm font-medium text-gray-800 whitespace-nowrap">{row.studentName}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{row.phone}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{row.fatherName ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.email ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.city ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.state ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.qualification ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{row.schoolCollege ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.passingYear ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.percentage ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.gender ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{row.course ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{row.source ?? "—"}</td>
                         <td className="px-3 py-2">
                           <Badge variant="success">Ready</Badge>
                         </td>

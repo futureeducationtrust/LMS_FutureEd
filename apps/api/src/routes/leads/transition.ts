@@ -154,17 +154,34 @@ export async function transitionLeadRoute(
             select: { admissionId: true, fileNumber: true },
           });
 
+          const year = new Date().getFullYear();
+          const idData: Record<string, unknown> = {};
           if (!existing?.admissionId) {
-            const year = new Date().getFullYear();
-            const totalCount = await tx.confirmedApplication.count();
-            const yearCount = await tx.confirmedApplication.count({
-              where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+            const last = await tx.confirmedApplication.findFirst({
+              where: { admissionId: { not: null } },
+              orderBy: { admissionId: "desc" },
+              select: { admissionId: true },
             });
-            const admissionId = `S${String(totalCount + 1).padStart(4, "0")}`;
-            const fileNumber = `${yearCount + 1}/${year}`;
+            const nextNum = last?.admissionId
+              ? parseInt(last.admissionId.slice(1)) + 1
+              : 1;
+            idData["admissionId"] = `S${String(nextNum).padStart(4, "0")}`;
+          }
+          if (!existing?.fileNumber) {
+            const yearApps = await tx.confirmedApplication.findMany({
+              where: { fileNumber: { endsWith: `/${year}` } },
+              select: { fileNumber: true },
+            });
+            const maxN = yearApps.reduce((m, a) => {
+              const n = parseInt(a.fileNumber?.split("/")[0] ?? "0");
+              return isNaN(n) ? m : Math.max(m, n);
+            }, 0);
+            idData["fileNumber"] = `${maxN + 1}/${year}`;
+          }
+          if (Object.keys(idData).length > 0) {
             await tx.confirmedApplication.update({
               where: { leadId: id },
-              data: { admissionId, fileNumber },
+              data: idData as any,
             });
           }
         }

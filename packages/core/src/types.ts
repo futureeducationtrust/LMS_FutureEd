@@ -50,6 +50,27 @@ export type ProcessedLeadRow = {
   studentName: string
   phone: string
   email: string | null
+  fatherName: string | null
+  alternatePhone: string | null
+  whatsappNumber: string | null
+  gender: string | null
+  maritalStatus: string | null
+  dateOfBirth: string | null
+  city: string | null
+  district: string | null
+  state: string | null
+  village: string | null
+  sector: string | null
+  qualification: string | null
+  schoolCollege: string | null
+  boardUniversity: string | null
+  passingYear: string | null
+  percentage: string | null
+  pcmPcbPercentage: string | null
+  purpose: string | null
+  remarks: string | null
+  course: string | null
+  source: string | null
 }
 
 export type DuplicateQueueItem = {

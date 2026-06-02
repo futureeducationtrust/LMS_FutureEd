@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Search, RefreshCw } from "lucide-react";
@@ -17,9 +17,15 @@ const YEAR_OPTIONS = Array.from({ length: 4 }, (_, i) => CURRENT_YEAR - i);
 
 export default function AdmissionsPage() {
   const { user } = useAuthStore();
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [year, setYear] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["admissions-leads", page, search, year],
@@ -76,11 +82,8 @@ export default function AdmissionsPage() {
           />
           <input
             placeholder="Search by name, phone, father name..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary"
           />
         </div>

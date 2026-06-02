@@ -55,6 +55,7 @@ type FormState = {
   admissionDate: string;
   duesAmount: string;
   dueDate: string;
+  fileNumber: string;
   extraCurricular: string;
   authorisedBy: string;
 };
@@ -130,6 +131,7 @@ const emptyForm: FormState = {
   admissionDate: "",
   duesAmount: "",
   dueDate: "",
+  fileNumber: "",
   extraCurricular: "",
   authorisedBy: "",
 };
@@ -472,6 +474,7 @@ export function ConfirmedApplicationTab({
         : "",
       duesAmount: String(app.duesAmount ?? ""),
       dueDate: app.dueDate ? (String(app.dueDate).split("T")[0] ?? "") : "",
+      fileNumber: app.fileNumber ?? "",
       extraCurricular: app.extraCurricular ?? "",
       authorisedBy: app.authorisedBy ?? "",
     });
@@ -653,23 +656,26 @@ export function ConfirmedApplicationTab({
         </button>
       </div>
 
-      {/* Application IDs — shown only after confirmed */}
-      {(app?.admissionId || app?.fileNumber) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg border border-primary-200 bg-primary-50">
-          <div>
-            <p className="text-xs font-medium text-gray-500 mb-1">Admission ID</p>
-            <p className="text-lg font-bold text-primary tracking-wide">
-              {app.admissionId ?? "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-gray-500 mb-1">File Number</p>
-            <p className="text-lg font-bold text-gray-800">
-              {app.fileNumber ?? "—"}
-            </p>
-          </div>
+      {/* Application reference fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-lg border border-surface-200 bg-surface-50">
+        <Field
+          label="File Number"
+          placeholder="e.g. 1/2026"
+          {...f("fileNumber")}
+        />
+        <div>
+          <p className="text-xs font-medium text-gray-600 mb-1">Admission ID</p>
+          {app?.admissionId ? (
+            <div className="w-full min-h-10 px-3 py-2 rounded-lg border border-surface-200 bg-white text-sm font-bold text-primary flex items-center tracking-wide">
+              {app.admissionId}
+            </div>
+          ) : (
+            <div className="w-full min-h-10 px-3 py-2 rounded-lg border border-surface-200 bg-white text-sm text-gray-400 flex items-center">
+              Auto-generated on confirm
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Identity */}
       <Section title="Identity Documents">

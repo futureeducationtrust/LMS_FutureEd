@@ -378,12 +378,56 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
           phone: string;
           email?: string | null;
           fatherName?: string | null;
+          alternatePhone?: string | null;
+          whatsappNumber?: string | null;
+          gender?: string | null;
+          maritalStatus?: string | null;
+          dateOfBirth?: string | null;
           city?: string | null;
+          district?: string | null;
           state?: string | null;
+          village?: string | null;
+          sector?: string | null;
+          qualification?: string | null;
+          schoolCollege?: string | null;
+          boardUniversity?: string | null;
+          passingYear?: string | null;
+          percentage?: string | null;
+          pcmPcbPercentage?: string | null;
+          purpose?: string | null;
+          remarks?: string | null;
+          course?: string | null;
+          source?: string | null;
         }>;
       };
 
       const { id: userId, branchId } = request.user;
+
+      // Pre-fetch courses and source types for name→id resolution
+      const [allCourses, allSources] = await Promise.all([
+        fastify.prisma.course.findMany({ select: { id: true, name: true } }),
+        fastify.prisma.leadSourceType.findMany({ select: { id: true, name: true } }),
+      ]);
+      const courseMap = new Map(allCourses.map((c) => [c.name.toLowerCase().trim(), c.id]));
+      const sourceMap = new Map(allSources.map((s) => [s.name.toLowerCase().trim(), s.id]));
+
+      // Fuzzy lookup: exact first, then contains fallback
+      function resolveCourseId(name: string): string | undefined {
+        const key = name.toLowerCase().trim();
+        if (courseMap.has(key)) return courseMap.get(key);
+        for (const [dbName, id] of courseMap.entries()) {
+          if (dbName.includes(key) || key.includes(dbName)) return id;
+        }
+        return undefined;
+      }
+      function resolveSourceId(name: string): string | undefined {
+        const key = name.toLowerCase().trim();
+        if (sourceMap.has(key)) return sourceMap.get(key);
+        for (const [dbName, id] of sourceMap.entries()) {
+          if (dbName.includes(key) || key.includes(dbName)) return id;
+        }
+        return undefined;
+      }
 
       // Get existing leads for duplicate check
       const existingLeads = await fastify.prisma.lead.findMany({
@@ -414,20 +458,64 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       const created = [];
       for (const row of result.imported) {
         try {
+          // Resolve source id
+          const sourceId = row.source
+            ? (resolveSourceId(row.source) ?? null)
+            : null;
+
+          // Resolve course ids (support comma-separated: "B.Tech CSE, MBA")
+          const courseIds: string[] = row.course
+            ? row.course
+                .split(",")
+                .map((n) => n.trim())
+                .map((n) => resolveCourseId(n))
+                .filter((id): id is string => !!id)
+            : [];
+
           const lead = await fastify.prisma.lead.create({
             data: {
               studentName: row.studentName,
               phone: row.phone,
-              email: (row as any).email ?? null,
-              fatherName: (row as any).fatherName ?? null,
-              city: (row as any).city ?? null,
-              state: (row as any).state ?? null,
+              email: row.email ?? null,
+              fatherName: row.fatherName ?? null,
+              alternatePhone: row.alternatePhone ?? null,
+              whatsappNumber: row.whatsappNumber ?? null,
+              gender: row.gender as any ?? null,
+              maritalStatus: row.maritalStatus as any ?? null,
+              dateOfBirth: row.dateOfBirth ? new Date(row.dateOfBirth) : null,
+              city: row.city ?? null,
+              district: row.district ?? null,
+              state: row.state ?? null,
+              village: row.village ?? null,
+              sector: row.sector ?? null,
+              qualification: row.qualification as any ?? null,
+              schoolCollege: row.schoolCollege ?? null,
+              boardUniversity: row.boardUniversity ?? null,
+              passingYear: row.passingYear ? Number(row.passingYear) : null,
+              percentage: row.percentage ? Number(row.percentage) : null,
+              pcmPcbPercentage: row.pcmPcbPercentage ? Number(row.pcmPcbPercentage) : null,
+              sourceId,
+              purpose: row.purpose ?? null,
+              remarks: row.remarks ?? null,
               branchId,
               createdById: userId,
               assignedToId: userId,
               status: "NEW",
             },
           });
+
+          // Create course associations
+          if (courseIds.length > 0) {
+            await fastify.prisma.leadCourse.createMany({
+              data: courseIds.map((courseId, index) => ({
+                leadId: lead.id,
+                courseId,
+                isPrimary: index === 0,
+              })),
+              skipDuplicates: true,
+            });
+          }
+
           created.push(lead);
         } catch {
           /* skip individual failures */
@@ -584,14 +672,28 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
           select: { admissionId: true, fileNumber: true },
         });
         const idUpdates: Record<string, unknown> = {};
+        const year = new Date().getFullYear();
         if (!existingApp?.admissionId) {
-          const year = new Date().getFullYear();
-          const totalCount = await tx.confirmedApplication.count();
-          const yearCount = await tx.confirmedApplication.count({
-            where: { createdAt: { gte: new Date(`${year}-01-01`) } },
+          const last = await tx.confirmedApplication.findFirst({
+            where: { admissionId: { not: null } },
+            orderBy: { admissionId: "desc" },
+            select: { admissionId: true },
           });
-          idUpdates["admissionId"] = `S${String(totalCount + 1).padStart(4, "0")}`;
-          idUpdates["fileNumber"] = `${yearCount + 1}/${year}`;
+          const nextNum = last?.admissionId
+            ? parseInt(last.admissionId.slice(1)) + 1
+            : 1;
+          idUpdates["admissionId"] = `S${String(nextNum).padStart(4, "0")}`;
+        }
+        if (!existingApp?.fileNumber) {
+          const yearApps = await tx.confirmedApplication.findMany({
+            where: { fileNumber: { endsWith: `/${year}` } },
+            select: { fileNumber: true },
+          });
+          const maxN = yearApps.reduce((m, a) => {
+            const n = parseInt(a.fileNumber?.split("/")[0] ?? "0");
+            return isNaN(n) ? m : Math.max(m, n);
+          }, 0);
+          idUpdates["fileNumber"] = `${maxN + 1}/${year}`;
         }
 
         await tx.confirmedApplication.update({

@@ -12,6 +12,26 @@ export type ExcelRow = {
   phone?: string;
   email?: string;
   fatherName?: string;
+  alternatePhone?: string;
+  whatsappNumber?: string;
+  gender?: string;
+  maritalStatus?: string;
+  dateOfBirth?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  village?: string;
+  sector?: string;
+  qualification?: string;
+  schoolCollege?: string;
+  boardUniversity?: string;
+  passingYear?: string;
+  percentage?: string;
+  pcmPcbPercentage?: string;
+  purpose?: string;
+  remarks?: string;
+  course?: string;
+  source?: string;
   courseNames?: string[];
   sourceName?: string;
 };
@@ -66,6 +86,27 @@ export function processImportRows(
       studentName: row.studentName.trim(),
       phone: row.phone.trim(),
       email: row.email?.trim() ?? null,
+      fatherName: row.fatherName?.trim() ?? null,
+      alternatePhone: row.alternatePhone?.trim() ?? null,
+      whatsappNumber: row.whatsappNumber?.trim() ?? null,
+      gender: row.gender?.trim() ?? null,
+      maritalStatus: row.maritalStatus?.trim() ?? null,
+      dateOfBirth: row.dateOfBirth?.trim() ?? null,
+      city: row.city?.trim() ?? null,
+      district: row.district?.trim() ?? null,
+      state: row.state?.trim() ?? null,
+      village: row.village?.trim() ?? null,
+      sector: row.sector?.trim() ?? null,
+      qualification: row.qualification?.trim() ?? null,
+      schoolCollege: row.schoolCollege?.trim() ?? null,
+      boardUniversity: row.boardUniversity?.trim() ?? null,
+      passingYear: row.passingYear?.trim() ?? null,
+      percentage: row.percentage?.trim() ?? null,
+      pcmPcbPercentage: row.pcmPcbPercentage?.trim() ?? null,
+      purpose: row.purpose?.trim() ?? null,
+      remarks: row.remarks?.trim() ?? null,
+      course: row.course?.trim() ?? null,
+      source: row.source?.trim() ?? null,
     };
 
     // Check for duplicates against existing DB leads

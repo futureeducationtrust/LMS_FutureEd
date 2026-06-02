@@ -79,60 +79,77 @@ export function buildLeadWhereClause(params: {
   }
 }) {
   const { userId, userRole, filters } = params
-  const where: Record<string, unknown> = {}
 
-  // Role-based visibility
-  if (userRole === 'EMPLOYEE') {
-    where['OR'] = [
-      { assignedToId: userId },
-      { createdById: userId },
-    ]
-  }
+  // Collect top-level AND conditions so nothing overwrites each other
+  const andClauses: Record<string, unknown>[] = []
 
-  // Confirmed lead visibility window for employees
+  // ── Role-based visibility (EMPLOYEE sees only their own leads) ──
   if (userRole === 'EMPLOYEE') {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    where['NOT'] = {
-      AND: [
-        { status: 'CONFIRMED' },
-        { confirmedAt: { lt: oneHourAgo } },
+    andClauses.push({
+      OR: [
+        { assignedToId: userId },
+        { createdById: userId },
       ],
-    }
+    })
+    // Confirmed leads fade out for employees after 1 hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+    andClauses.push({
+      NOT: {
+        AND: [
+          { status: 'CONFIRMED' },
+          { confirmedAt: { lt: oneHourAgo } },
+        ],
+      },
+    })
   }
 
-  // Filters
-  if (filters.status) where['status'] = filters.status
-  if (filters.assignedToId) where['assignedToId'] = filters.assignedToId
-  if (filters.sourceId) where['sourceId'] = filters.sourceId
-  if (filters.branchId) where['branchId'] = filters.branchId
+  // ── Status filter ──
+  // When search is active: ignore status — results come from the full DB.
+  // When no search and no explicit status: hide CONFIRMED/INTERESTED (they
+  // have their own dedicated tabs).
+  if (filters.search) {
+    // global search — no status restriction
+  } else if (filters.status) {
+    andClauses.push({ status: filters.status })
+  } else {
+    andClauses.push({ status: { notIn: ['CONFIRMED', 'INTERESTED'] } })
+  }
+
+  // ── Other filters ──
+  if (filters.assignedToId) andClauses.push({ assignedToId: filters.assignedToId })
+  if (filters.sourceId)     andClauses.push({ sourceId: filters.sourceId })
+  if (filters.branchId)     andClauses.push({ branchId: filters.branchId })
 
   if (filters.courseId) {
-    where['courses'] = {
-      some: { courseId: filters.courseId },
-    }
+    andClauses.push({ courses: { some: { courseId: filters.courseId } } })
   }
 
+  // ── Full-DB search (name, phone, email, father name, location) ──
   if (filters.search) {
-    where['OR'] = [
-      { studentName: { contains: filters.search, mode: 'insensitive' } },
-      { phone: { contains: filters.search } },
-      { email: { contains: filters.search, mode: 'insensitive' } },
-      { fatherName:   { contains: filters.search, mode: 'insensitive' } },
-      { city:         { contains: filters.search, mode: 'insensitive' } },
-      { district:     { contains: filters.search, mode: 'insensitive' } },
-      { village:      { contains: filters.search, mode: 'insensitive' } },
-      { sector:       { contains: filters.search, mode: 'insensitive' } },
-    ]
+    andClauses.push({
+      OR: [
+        { studentName:  { contains: filters.search, mode: 'insensitive' } },
+        { phone:        { contains: filters.search } },
+        { email:        { contains: filters.search, mode: 'insensitive' } },
+        { fatherName:   { contains: filters.search, mode: 'insensitive' } },
+        { city:         { contains: filters.search, mode: 'insensitive' } },
+        { district:     { contains: filters.search, mode: 'insensitive' } },
+        { village:      { contains: filters.search, mode: 'insensitive' } },
+        { sector:       { contains: filters.search, mode: 'insensitive' } },
+      ],
+    })
   }
 
   if (filters.dateFrom ?? filters.dateTo) {
-    where['createdAt'] = {
-      ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
-      ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
-    }
+    andClauses.push({
+      createdAt: {
+        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+        ...(filters.dateTo   ? { lte: new Date(filters.dateTo)   } : {}),
+      },
+    })
   }
 
-  return where
+  return andClauses.length === 0 ? {} : andClauses.length === 1 ? andClauses[0]! : { AND: andClauses }
 }
 
 // ── Duplicate check query ──
