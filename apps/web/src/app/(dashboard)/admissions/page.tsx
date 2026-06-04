@@ -12,15 +12,11 @@ import { useAuthStore } from "@/store/auth";
 import { Role } from "@lms/types";
 import { formatTimeAgo } from "@/lib/utils";
 
-const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = Array.from({ length: 4 }, (_, i) => CURRENT_YEAR - i);
-
 export default function AdmissionsPage() {
   const { user } = useAuthStore();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [year, setYear] = useState("");
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -31,7 +27,7 @@ export default function AdmissionsPage() {
   }, [searchInput]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admissions-leads", page, search, year],
+    queryKey: ["admissions-leads", page, search],
     queryFn: async () => {
       const params = new URLSearchParams({
         status: "INTERESTED",
@@ -39,10 +35,6 @@ export default function AdmissionsPage() {
         pageSize: "20",
       });
       if (search) params.set("search", search);
-      if (year) {
-        params.set("dateFrom", `${year}-01-01`);
-        params.set("dateTo", `${year}-12-31`);
-      }
       const { data } = await api.get(`/leads?${params.toString()}`);
       return data.data as {
         leads: any[];
@@ -61,9 +53,9 @@ export default function AdmissionsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Admissions</h1>
+          <h1 className="text-xl font-bold text-gray-900">Interested Leads</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            In-progress admissions{data && ` · ${data.total} total`}
+            In-progress interested leads{data && ` · ${data.total} total`}
           </p>
         </div>
         <button
@@ -90,22 +82,6 @@ export default function AdmissionsPage() {
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary"
           />
         </div>
-        <select
-          value={year}
-          onChange={(e) => {
-            setYear(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Filter by year"
-          className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-        >
-          <option value="">All Years</option>
-          {YEAR_OPTIONS.map((y) => (
-            <option key={y} value={String(y)}>
-              {y}
-            </option>
-          ))}
-        </select>
       </div>
 
       {isLoading ? (
@@ -114,7 +90,7 @@ export default function AdmissionsPage() {
         <EmptyState
           icon={<FileText size={24} />}
           title="No interested leads"
-          description="Leads with INTERESTED status will appear here for admission processing"
+          description="Leads with INTERESTED status will appear here"
         />
       ) : (
         <>
@@ -131,7 +107,7 @@ export default function AdmissionsPage() {
               return (
                 <div
                   key={lead.id}
-                  className="bg-white border border-surface-200 rounded-xl p-4 space-y-3"
+                  className="bg-white border border-orange-200 rounded-xl p-4 space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

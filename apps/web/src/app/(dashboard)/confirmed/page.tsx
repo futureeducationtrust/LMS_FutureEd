@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Search, RefreshCw, Mail } from "lucide-react";
+import { CheckCircle2, Search, RefreshCw, Mail, Sparkles } from "lucide-react";
 import api from "@/lib/api";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -12,11 +12,19 @@ import { useAuthStore } from "@/store/auth";
 import { Role } from "@lms/types";
 import { formatDate, formatTimeAgo } from "@/lib/utils";
 
+const ADMISSION_YEAR_START = 2017;
+const ADMISSION_YEAR_END = new Date().getFullYear() + 1;
+const ADMISSION_YEAR_OPTIONS = Array.from(
+  { length: ADMISSION_YEAR_END - ADMISSION_YEAR_START + 1 },
+  (_, index) => ADMISSION_YEAR_END - index,
+);
+
 export default function ConfirmedLeadsPage() {
   const { user } = useAuthStore();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [year, setYear] = useState("");
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -27,7 +35,7 @@ export default function ConfirmedLeadsPage() {
   }, [searchInput]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["confirmed-leads", page, search],
+    queryKey: ["confirmed-leads", page, search, year],
     queryFn: async () => {
       const params = new URLSearchParams({
         status: "CONFIRMED",
@@ -35,6 +43,10 @@ export default function ConfirmedLeadsPage() {
         pageSize: "20",
       });
       if (search) params.set("search", search);
+      if (year) {
+        params.set("dateFrom", `${year}-01-01`);
+        params.set("dateTo", `${year}-12-31`);
+      }
       const { data } = await api.get(`/leads?${params.toString()}`);
       return data.data as {
         leads: any[];
@@ -53,25 +65,34 @@ export default function ConfirmedLeadsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Confirmed Leads</h1>
+          <h1 className="text-xl font-bold text-gray-900">Admission</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Leads whose admission application has been sent
+            Confirmed leads ready for admission processing
             {data && ` · ${data.total} total`}
           </p>
         </div>
-        <button
-          type="button"
-          title="Refresh"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          className="p-2 rounded-lg border border-surface-200 text-gray-500 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/direct-admission"
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors"
+          >
+            <Sparkles size={14} />
+            Direct Admission
+          </Link>
+          <button
+            type="button"
+            title="Refresh"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="p-2 rounded-lg border border-surface-200 text-gray-500 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white border border-surface-200 rounded-xl p-4">
-        <div className="relative max-w-sm">
+      <div className="bg-white border border-surface-200 rounded-xl p-4 flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-48 max-w-sm">
           <Search
             size={14}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -83,6 +104,22 @@ export default function ConfirmedLeadsPage() {
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary"
           />
         </div>
+        <select
+          value={year}
+          onChange={(e) => {
+            setYear(e.target.value);
+            setPage(1);
+          }}
+          aria-label="Filter by admission year"
+          className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+        >
+          <option value="">All Years</option>
+          {ADMISSION_YEAR_OPTIONS.map((optionYear) => (
+            <option key={optionYear} value={String(optionYear)}>
+              {optionYear}
+            </option>
+          ))}
+        </select>
       </div>
 
       {isLoading ? (
@@ -90,8 +127,8 @@ export default function ConfirmedLeadsPage() {
       ) : leads.length === 0 ? (
         <EmptyState
           icon={<CheckCircle2 size={24} />}
-          title="No confirmed leads yet"
-          description="Leads whose admission application has been sent will appear here"
+          title="No admissions yet"
+          description="Confirmed leads will appear here"
         />
       ) : (
         <>
@@ -106,15 +143,15 @@ export default function ConfirmedLeadsPage() {
               return (
                 <div
                   key={lead.id}
-                  className="bg-white border border-surface-200 rounded-xl p-4 space-y-3"
+                  className="bg-white border border-green-200 rounded-xl p-4 space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 break-words">
+                      <p className="text-sm font-semibold text-gray-800 wrap-break-word">
                         {lead.studentName}
                       </p>
                       {lead.fatherName && (
-                        <p className="text-xs text-gray-400 break-words mt-0.5">
+                        <p className="text-xs text-gray-400 wrap-break-word mt-0.5">
                           Father: {lead.fatherName}
                         </p>
                       )}
@@ -130,7 +167,8 @@ export default function ConfirmedLeadsPage() {
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
                       <p className="text-gray-400 uppercase tracking-wide mb-0.5">
-                        Adm ID
+                        className="bg-white border border-green-200 rounded-xl
+                        p-4 space-y-4"
                       </p>
                       <p className="text-gray-700 font-medium">
                         {lead.confirmedApplication?.admissionId ?? "—"}
@@ -154,7 +192,7 @@ export default function ConfirmedLeadsPage() {
                       <p className="text-gray-400 uppercase tracking-wide mb-0.5">
                         Course
                       </p>
-                      <p className="text-gray-700 font-medium break-words">
+                      <p className="text-gray-700 font-medium wrap-break-word">
                         {courseName}
                       </p>
                     </div>
@@ -163,7 +201,7 @@ export default function ConfirmedLeadsPage() {
                         <p className="text-gray-400 uppercase tracking-wide mb-0.5">
                           Counsellor
                         </p>
-                        <p className="text-gray-700 font-medium break-words">
+                        <p className="text-gray-700 font-medium wrap-break-word">
                           {lead.assignedTo?.name ?? (
                             <span className="text-amber-600">Unassigned</span>
                           )}

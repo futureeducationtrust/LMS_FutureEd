@@ -234,6 +234,8 @@ export async function sendAdmissionFormEmail(params: {
 }): Promise<void> {
   if (!config.smtp.user || !config.smtp.pass) return;
 
+  const directAdmissionUrl = `${config.frontendUrl}/direct-admission`;
+
   await transporter.sendMail({
     from: config.smtp.from,
     to: params.to,
@@ -245,6 +247,7 @@ export async function sendAdmissionFormEmail(params: {
         Your admission assistance application for <strong>${params.courseName}</strong>
         has been processed by our team at ${params.branchName}.
       </div>
+      <a href="${directAdmissionUrl}" class="btn">Open Direct Admission Link</a>
       <div class="body">
         Please find your admission form attached to this email. Keep it for your records.
         Our counsellor will be in touch with you shortly regarding the next steps.

@@ -9,6 +9,7 @@ type Props = {
   trend?: number; // % change vs previous period
   icon: React.ReactNode;
   iconBg?: string;
+  borderAccentClassName?: string;
   loading?: boolean;
   href?: string;
 };
@@ -20,6 +21,7 @@ export function StatCard({
   trend,
   icon,
   iconBg = "bg-primary-50",
+  borderAccentClassName,
   loading,
   href,
 }: Props) {
@@ -39,7 +41,8 @@ export function StatCard({
     <div
       onClick={href ? () => router.push(href) : undefined}
       className={cn(
-        "bg-white border border-surface-200 rounded-xl p-5 hover:shadow-sm transition-shadow",
+        "bg-white border border-surface-200 rounded-xl p-5 hover:shadow-sm transition-shadow border-l-4",
+        borderAccentClassName,
         href && "cursor-pointer hover:border-primary-300",
       )}
     >

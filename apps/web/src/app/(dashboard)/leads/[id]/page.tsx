@@ -142,6 +142,7 @@ export default function LeadDetailPage() {
         <div className="bg-white border border-surface-200 rounded-xl p-6">
           <ConfirmedApplicationTab
             leadId={id}
+            leadData={lead}
             leadStatus={lead.status}
             mode={lead.status === LeadStatus.CONFIRMED ? "view" : "edit"}
             confirmOnSave={lead.status !== LeadStatus.CONFIRMED}

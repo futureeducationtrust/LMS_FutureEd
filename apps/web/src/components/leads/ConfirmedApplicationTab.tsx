@@ -23,7 +23,7 @@ import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { extractApiError } from "@/lib/utils";
-import { LeadStatus } from "@lms/types";
+import { LeadStatus, QualificationLevel, type Lead } from "@lms/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -142,6 +142,71 @@ const emptyForm: FormState = {
   extraCurricular: "",
   authorisedBy: "",
 };
+
+function buildLeadAddress(lead: Lead): string {
+  return [
+    lead.village,
+    lead.sector,
+    lead.city,
+    lead.district,
+    lead.state,
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join(", ");
+}
+
+function mapQualificationToLevel(
+  qualification: QualificationLevel | null,
+): keyof Record<string, AcademicRow> | null {
+  switch (qualification) {
+    case QualificationLevel.TENTH:
+      return "TENTH";
+    case QualificationLevel.TWELFTH:
+      return "TWELFTH";
+    case QualificationLevel.GRADUATION:
+      return "GRADUATION";
+    case QualificationLevel.POST_GRADUATION:
+      return "POST_GRADUATION";
+    default:
+      return null;
+  }
+}
+
+function buildFormFromLead(lead: Lead): FormState {
+  const address = buildLeadAddress(lead);
+
+  return {
+    ...emptyForm,
+    gender: lead.gender ?? "",
+    maritalStatus: lead.maritalStatus ?? "",
+    fatherName: lead.fatherName ?? "",
+    postalAddress: address,
+    permanentAddress: address,
+    permanentPhone: lead.phone ?? "",
+  };
+}
+
+function buildAcademicFromLead(lead: Lead): Record<string, AcademicRow> {
+  const nextAcademic = {
+    TENTH: { ...emptyAcademic },
+    TWELFTH: { ...emptyAcademic },
+    GRADUATION: { ...emptyAcademic },
+    POST_GRADUATION: { ...emptyAcademic },
+  };
+
+  const mappedLevel = mapQualificationToLevel(lead.qualification);
+  if (!mappedLevel) return nextAcademic;
+
+  nextAcademic[mappedLevel] = {
+    ...emptyAcademic,
+    institution: lead.schoolCollege ?? "",
+    board: lead.boardUniversity ?? "",
+    passingYear: lead.passingYear ? String(lead.passingYear) : "",
+    percentage: lead.percentage ? String(lead.percentage) : "",
+  };
+
+  return nextAcademic;
+}
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
@@ -410,6 +475,7 @@ function DocumentUploadSection({
 
 type Props = {
   leadId: string;
+  leadData?: Lead;
   leadStatus?: LeadStatus;
   mode?: AdmissionMode;
   confirmOnSave?: boolean;
@@ -417,6 +483,7 @@ type Props = {
 
 export function ConfirmedApplicationTab({
   leadId,
+  leadData,
   leadStatus,
   mode = "edit",
   confirmOnSave = false,
@@ -447,85 +514,95 @@ export function ConfirmedApplicationTab({
   }, [mode, leadId]);
 
   useEffect(() => {
-    if (!app) return;
-    setForm({
-      aadharNo: app.aadharNo ?? "",
-      apaarId: app.apaarId ?? "",
-      gender: ((app as Record<string, unknown>)["gender"] as string) ?? "",
-      maritalStatus:
-        ((app as Record<string, unknown>)["maritalStatus"] as string) ?? "",
-      fatherName:
-        ((app as Record<string, unknown>)["fatherName"] as string) ?? "",
-      motherName: app.motherName ?? "",
-      motherOccupation: app.motherOccupation ?? "",
-      motherIncome: String(app.motherIncome ?? ""),
-      fatherOccupation: app.fatherOccupation ?? "",
-      fatherIncome: String(app.fatherIncome ?? ""),
-      noOfSisters: String(app.noOfSisters ?? ""),
-      noOfBrothers: String(app.noOfBrothers ?? ""),
-      nationality: app.nationality ?? "Indian",
-      religion: app.religion ?? "",
-      category: app.category ?? "",
-      postalAddress:
-        ((app as Record<string, unknown>)["postalAddress"] as string) ?? "",
-      permanentAddress: app.permanentAddress ?? "",
-      permanentPhone: app.permanentPhone ?? "",
-      localGuardianName: app.localGuardianName ?? "",
-      localGuardianAddress: app.localGuardianAddress ?? "",
-      localGuardianPhone: app.localGuardianPhone ?? "",
-      bookingAmount: String(app.bookingAmount ?? ""),
-      bookingCashDDNo: app.bookingCashDDNo ?? "",
-      bookingBank: app.bookingBank ?? "",
-      bookingDate: app.bookingDate
-        ? (String(app.bookingDate).split("T")[0] ?? "")
-        : "",
-      admissionAmount: String(app.admissionAmount ?? ""),
-      admissionCashDDNo: app.admissionCashDDNo ?? "",
-      admissionBank: app.admissionBank ?? "",
-      admissionDate: app.admissionDate
-        ? (String(app.admissionDate).split("T")[0] ?? "")
-        : "",
-      duesAmount: String(app.duesAmount ?? ""),
-      dueDate: app.dueDate ? (String(app.dueDate).split("T")[0] ?? "") : "",
-      fileNumber: app.fileNumber ?? "",
-      extraCurricular: app.extraCurricular ?? "",
-      authorisedBy: app.authorisedBy ?? "",
-    });
+    if (app) {
+      setForm({
+        aadharNo: app.aadharNo ?? "",
+        apaarId: app.apaarId ?? "",
+        gender: ((app as Record<string, unknown>)["gender"] as string) ?? "",
+        maritalStatus:
+          ((app as Record<string, unknown>)["maritalStatus"] as string) ?? "",
+        fatherName:
+          ((app as Record<string, unknown>)["fatherName"] as string) ?? "",
+        motherName: app.motherName ?? "",
+        motherOccupation: app.motherOccupation ?? "",
+        motherIncome: String(app.motherIncome ?? ""),
+        fatherOccupation: app.fatherOccupation ?? "",
+        fatherIncome: String(app.fatherIncome ?? ""),
+        noOfSisters: String(app.noOfSisters ?? ""),
+        noOfBrothers: String(app.noOfBrothers ?? ""),
+        nationality: app.nationality ?? "Indian",
+        religion: app.religion ?? "",
+        category: app.category ?? "",
+        postalAddress:
+          ((app as Record<string, unknown>)["postalAddress"] as string) ?? "",
+        permanentAddress: app.permanentAddress ?? "",
+        permanentPhone: app.permanentPhone ?? "",
+        localGuardianName: app.localGuardianName ?? "",
+        localGuardianAddress: app.localGuardianAddress ?? "",
+        localGuardianPhone: app.localGuardianPhone ?? "",
+        bookingAmount: String(app.bookingAmount ?? ""),
+        bookingCashDDNo: app.bookingCashDDNo ?? "",
+        bookingBank: app.bookingBank ?? "",
+        bookingDate: app.bookingDate
+          ? (String(app.bookingDate).split("T")[0] ?? "")
+          : "",
+        admissionAmount: String(app.admissionAmount ?? ""),
+        admissionCashDDNo: app.admissionCashDDNo ?? "",
+        admissionBank: app.admissionBank ?? "",
+        admissionDate: app.admissionDate
+          ? (String(app.admissionDate).split("T")[0] ?? "")
+          : "",
+        duesAmount: String(app.duesAmount ?? ""),
+        dueDate: app.dueDate ? (String(app.dueDate).split("T")[0] ?? "") : "",
+        fileNumber: app.fileNumber ?? "",
+        extraCurricular: app.extraCurricular ?? "",
+        authorisedBy: app.authorisedBy ?? "",
+      });
 
-    const nextAcademic = {
-      TENTH: { ...emptyAcademic },
-      TWELFTH: { ...emptyAcademic },
-      GRADUATION: { ...emptyAcademic },
-      POST_GRADUATION: { ...emptyAcademic },
-    };
+      const nextAcademic = {
+        TENTH: { ...emptyAcademic },
+        TWELFTH: { ...emptyAcademic },
+        GRADUATION: { ...emptyAcademic },
+        POST_GRADUATION: { ...emptyAcademic },
+      };
 
-    if (app.academicRecords?.length) {
-      for (const rec of app.academicRecords as any[]) {
-        if (nextAcademic[rec.level as keyof typeof nextAcademic]) {
-          nextAcademic[rec.level as keyof typeof nextAcademic] = {
-            stream: rec.stream ?? "",
-            institution: rec.institution ?? "",
-            board: rec.board ?? "",
-            passingYear: String(rec.passingYear ?? ""),
-            percentage: String(rec.percentage ?? ""),
-            grade: rec.grade ?? "",
-          };
+      if (app.academicRecords?.length) {
+        for (const rec of app.academicRecords as any[]) {
+          if (nextAcademic[rec.level as keyof typeof nextAcademic]) {
+            nextAcademic[rec.level as keyof typeof nextAcademic] = {
+              stream: rec.stream ?? "",
+              institution: rec.institution ?? "",
+              board: rec.board ?? "",
+              passingYear: String(rec.passingYear ?? ""),
+              percentage: String(rec.percentage ?? ""),
+              grade: rec.grade ?? "",
+            };
+          }
         }
       }
-    }
-    setAcademic(nextAcademic);
+      setAcademic(nextAcademic);
 
-    if (app.entranceExams?.length) {
-      setExams(
-        (app.entranceExams as any[]).map((e) => ({
-          examName: e.examName ?? "",
-          rollNo: e.rollNo ?? "",
-          score: e.score ?? "",
-          rank: String(e.rank ?? ""),
-        })),
-      );
+      if (app.entranceExams?.length) {
+        setExams(
+          (app.entranceExams as any[]).map((e) => ({
+            examName: e.examName ?? "",
+            rollNo: e.rollNo ?? "",
+            score: e.score ?? "",
+            rank: String(e.rank ?? ""),
+          })),
+        );
+      } else {
+        setExams([{ examName: "", rollNo: "", score: "", rank: "" }]);
+      }
+      return;
     }
-  }, [app]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    if (!leadData) return;
+
+    setForm(buildFormFromLead(leadData));
+    setAcademic(buildAcademicFromLead(leadData));
+    setExams([{ examName: "", rollNo: "", score: "", rank: "" }]);
+  }, [app, leadData]);
 
   function f(field: keyof FormState) {
     return {

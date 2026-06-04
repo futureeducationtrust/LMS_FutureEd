@@ -44,6 +44,7 @@ export function AdminDashboard() {
           value={summary?.totalLeadsInPeriod ?? 0}
           subtitle="vs last period"
           icon={<Users size={16} className="text-primary" />}
+          borderAccentClassName="border-l-red-500"
           loading={isLoading}
           href="/leads"
         />
@@ -53,6 +54,7 @@ export function AdminDashboard() {
           subtitle="new today"
           icon={<CheckCircle2 size={16} className="text-green-600" />}
           iconBg="bg-green-50"
+          borderAccentClassName="border-l-green-400"
           loading={isLoading}
           href="/admissions"
         />
@@ -62,6 +64,7 @@ export function AdminDashboard() {
           subtitle="need action"
           icon={<AlertTriangle size={16} className="text-amber-600" />}
           iconBg="bg-amber-50"
+          borderAccentClassName="border-l-yellow-400"
           loading={isLoading}
           href="/leads?overdue=true"
         />
@@ -71,6 +74,7 @@ export function AdminDashboard() {
           subtitle="active"
           icon={<TrendingUp size={16} className="text-indigo-600" />}
           iconBg="bg-indigo-50"
+          borderAccentClassName="border-l-orange-500"
           loading={isLoading}
           href="/leads"
         />
@@ -79,6 +83,7 @@ export function AdminDashboard() {
           value={`${summary?.conversionRate ?? 0}%`}
           subtitle="this period"
           icon={<CheckCircle2 size={16} className="text-primary" />}
+          borderAccentClassName="border-l-green-600"
           loading={isLoading}
           href="/admissions"
         />

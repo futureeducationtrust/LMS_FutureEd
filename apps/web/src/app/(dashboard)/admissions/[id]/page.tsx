@@ -65,6 +65,7 @@ export default function AdmissionFormPage() {
       <div className="bg-white border border-surface-200 rounded-xl p-6">
         <ConfirmedApplicationTab
           leadId={id}
+          leadData={lead}
           leadStatus={lead.status}
           mode={isConfirmed ? "view" : "edit"}
           confirmOnSave={!isConfirmed}

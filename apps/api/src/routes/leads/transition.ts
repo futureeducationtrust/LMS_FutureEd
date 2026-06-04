@@ -2,13 +2,105 @@ import type { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
 import { canTransitionLead } from "@lms/auth";
 import { transitionLead, getValidTransitions } from "@lms/core";
-import { LeadStatus, Role, TransitionLeadSchema } from "@lms/types";
+import {
+  LeadStatus,
+  QualificationLevel,
+  Role,
+  TransitionLeadSchema,
+} from "@lms/types";
 import { validateBody } from "../../middleware/validate";
 import { QUEUES } from "../../plugins/bullmq";
 import {
   invalidateAnalyticsCache,
   invalidateActivityCache,
 } from "../../services/cache";
+
+type LeadDraftSource = {
+  phone: string;
+  fatherName: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  village: string | null;
+  sector: string | null;
+  city: string | null;
+  district: string | null;
+  state: string | null;
+  qualification: QualificationLevel | null;
+  schoolCollege: string | null;
+  boardUniversity: string | null;
+  passingYear: number | null;
+  percentage: number | null;
+};
+
+type ExistingConfirmedDraft = {
+  id: string;
+  fatherName: string | null;
+  gender: string | null;
+  maritalStatus: string | null;
+  postalAddress: string | null;
+  permanentAddress: string | null;
+  permanentPhone: string | null;
+  admissionId: string | null;
+  fileNumber: string | null;
+  academicRecords: Array<{ level: QualificationLevel }>;
+};
+
+function buildLeadAddress(lead: LeadDraftSource): string | null {
+  const parts = [
+    lead.village,
+    lead.sector,
+    lead.city,
+    lead.district,
+    lead.state,
+  ].filter((value): value is string => Boolean(value?.trim()));
+
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+function mapQualificationToAcademicLevel(
+  qualification: QualificationLevel | null,
+): QualificationLevel | null {
+  switch (qualification) {
+    case QualificationLevel.TENTH:
+    case QualificationLevel.TWELFTH:
+    case QualificationLevel.GRADUATION:
+    case QualificationLevel.POST_GRADUATION:
+      return qualification;
+    default:
+      return null;
+  }
+}
+
+function buildConfirmedDraftData(
+  lead: LeadDraftSource,
+  existing: ExistingConfirmedDraft | null,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+  const address = buildLeadAddress(lead);
+
+  if (!existing?.fatherName && lead.fatherName) {
+    data["fatherName"] = lead.fatherName;
+  }
+  if (!existing?.gender && lead.gender) {
+    data["gender"] = lead.gender;
+  }
+  if (!existing?.maritalStatus && lead.maritalStatus) {
+    data["maritalStatus"] = lead.maritalStatus;
+  }
+  if (!existing?.permanentPhone && lead.phone) {
+    data["permanentPhone"] = lead.phone;
+  }
+  if (address) {
+    if (!existing?.postalAddress) {
+      data["postalAddress"] = address;
+    }
+    if (!existing?.permanentAddress) {
+      data["permanentAddress"] = address;
+    }
+  }
+
+  return data;
+}
 
 export async function transitionLeadRoute(
   fastify: FastifyInstance,
@@ -33,6 +125,20 @@ export async function transitionLeadRoute(
           id: true,
           studentName: true,
           email: true,
+          phone: true,
+          fatherName: true,
+          gender: true,
+          maritalStatus: true,
+          village: true,
+          sector: true,
+          city: true,
+          district: true,
+          state: true,
+          qualification: true,
+          schoolCollege: true,
+          boardUniversity: true,
+          passingYear: true,
+          percentage: true,
           status: true,
           assignedTo: { select: { id: true } },
           createdBy: { select: { id: true } },
@@ -107,8 +213,90 @@ export async function transitionLeadRoute(
 
       // Handle CONFIRMED transition specially
       const isConfirming = toStatus === LeadStatus.CONFIRMED;
+      const shouldPrepareAdmissionDraft =
+        toStatus === LeadStatus.INTERESTED || isConfirming;
 
       await fastify.prisma.$transaction(async (tx) => {
+        let existingConfirmedApp: ExistingConfirmedDraft | null = null;
+
+        if (shouldPrepareAdmissionDraft) {
+          existingConfirmedApp = await tx.confirmedApplication.findUnique({
+            where: { leadId: id },
+            select: {
+              id: true,
+              fatherName: true,
+              gender: true,
+              maritalStatus: true,
+              postalAddress: true,
+              permanentAddress: true,
+              permanentPhone: true,
+              admissionId: true,
+              fileNumber: true,
+              academicRecords: { select: { level: true } },
+            },
+          });
+
+          const draftData = buildConfirmedDraftData(lead, existingConfirmedApp);
+
+          if (existingConfirmedApp) {
+            if (Object.keys(draftData).length > 0) {
+              await tx.confirmedApplication.update({
+                where: { leadId: id },
+                data: draftData,
+              });
+            }
+          } else {
+            existingConfirmedApp = await tx.confirmedApplication.create({
+              data: {
+                leadId: id,
+                ...draftData,
+              },
+              select: {
+                id: true,
+                fatherName: true,
+                gender: true,
+                maritalStatus: true,
+                postalAddress: true,
+                permanentAddress: true,
+                permanentPhone: true,
+                admissionId: true,
+                fileNumber: true,
+                academicRecords: { select: { level: true } },
+              },
+            });
+          }
+
+          const academicLevel = mapQualificationToAcademicLevel(
+            lead.qualification,
+          );
+          const hasAcademicSeedData = Boolean(
+            academicLevel &&
+              (lead.schoolCollege ||
+                lead.boardUniversity ||
+                lead.passingYear ||
+                lead.percentage),
+          );
+          const hasAcademicLevelAlready = Boolean(
+            academicLevel &&
+              existingConfirmedApp.academicRecords.some(
+                (record) => record.level === academicLevel,
+              ),
+          );
+
+          if (academicLevel && hasAcademicSeedData && !hasAcademicLevelAlready) {
+            await tx.academicRecord.create({
+              data: {
+                confirmedApplicationId: existingConfirmedApp.id,
+                level: academicLevel,
+                institution: lead.schoolCollege ?? null,
+                board: lead.boardUniversity ?? null,
+                passingYear: lead.passingYear ?? null,
+                percentage: lead.percentage ?? null,
+              },
+            });
+          }
+        }
+
         await tx.lead.update({
           where: { id },
           data: {
@@ -142,17 +330,24 @@ export async function transitionLeadRoute(
 
         // Create ConfirmedApplication record when confirmed, generate IDs
         if (isConfirming) {
-          await tx.confirmedApplication.upsert({
-            where: { leadId: id },
-            update: {},
-            create: { leadId: id },
-          });
-
           // Only generate IDs if not already assigned
-          const existing = await tx.confirmedApplication.findUnique({
-            where: { leadId: id },
-            select: { admissionId: true, fileNumber: true },
-          });
+          const existing =
+            existingConfirmedApp ??
+            (await tx.confirmedApplication.findUnique({
+              where: { leadId: id },
+              select: {
+                id: true,
+                fatherName: true,
+                gender: true,
+                maritalStatus: true,
+                postalAddress: true,
+                permanentAddress: true,
+                permanentPhone: true,
+                admissionId: true,
+                fileNumber: true,
+                academicRecords: { select: { level: true } },
+              },
+            }));
 
           const year = new Date().getFullYear();
           const idData: Record<string, unknown> = {};

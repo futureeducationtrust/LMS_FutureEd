@@ -44,6 +44,7 @@ export type ConfirmedApplication = {
   apaarId: string | null;
   gender: Gender | null;
   maritalStatus: MaritalStatus | null;
+  fatherName: string | null;
   motherName: string | null;
   motherOccupation: string | null;
   motherIncome: number | null;
@@ -54,6 +55,7 @@ export type ConfirmedApplication = {
   nationality: string | null;
   religion: string | null;
   category: string | null;
+  postalAddress: string | null;
   permanentAddress: string | null;
   permanentPhone: string | null;
   localGuardianName: string | null;
