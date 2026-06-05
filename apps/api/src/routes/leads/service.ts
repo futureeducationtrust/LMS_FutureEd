@@ -1,6 +1,14 @@
 import type { PrismaClient } from '@lms/db'
 import type { LeadStatus, Role } from '@lms/types'
 
+function toDateRangeStart(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
+function toDateRangeEnd(value: string): Date {
+  return new Date(`${value}T23:59:59.999Z`)
+}
+
 // ── Shared lead select — what we return on every lead ──
 export const leadSummarySelect = {
   id: true,
@@ -143,8 +151,8 @@ export function buildLeadWhereClause(params: {
   if (filters.dateFrom ?? filters.dateTo) {
     andClauses.push({
       createdAt: {
-        ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
-        ...(filters.dateTo   ? { lte: new Date(filters.dateTo)   } : {}),
+        ...(filters.dateFrom ? { gte: toDateRangeStart(filters.dateFrom) } : {}),
+        ...(filters.dateTo   ? { lte: toDateRangeEnd(filters.dateTo)   } : {}),
       },
     })
   }

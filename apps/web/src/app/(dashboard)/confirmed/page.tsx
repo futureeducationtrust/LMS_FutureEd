@@ -13,7 +13,7 @@ import { Role } from "@lms/types";
 import { formatDate, formatTimeAgo } from "@/lib/utils";
 
 const ADMISSION_YEAR_START = 2017;
-const ADMISSION_YEAR_END = new Date().getFullYear() + 1;
+const ADMISSION_YEAR_END = new Date().getFullYear();
 const ADMISSION_YEAR_OPTIONS = Array.from(
   { length: ADMISSION_YEAR_END - ADMISSION_YEAR_START + 1 },
   (_, index) => ADMISSION_YEAR_END - index,

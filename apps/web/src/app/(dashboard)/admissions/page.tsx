@@ -12,11 +12,19 @@ import { useAuthStore } from "@/store/auth";
 import { Role } from "@lms/types";
 import { formatTimeAgo } from "@/lib/utils";
 
+const ADMISSION_YEAR_START = 2017;
+const ADMISSION_YEAR_END = new Date().getFullYear();
+const ADMISSION_YEAR_OPTIONS = Array.from(
+  { length: ADMISSION_YEAR_END - ADMISSION_YEAR_START + 1 },
+  (_, index) => ADMISSION_YEAR_END - index,
+);
+
 export default function AdmissionsPage() {
   const { user } = useAuthStore();
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [year, setYear] = useState("");
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -27,7 +35,7 @@ export default function AdmissionsPage() {
   }, [searchInput]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admissions-leads", page, search],
+    queryKey: ["admissions-leads", page, search, year],
     queryFn: async () => {
       const params = new URLSearchParams({
         status: "INTERESTED",
@@ -35,6 +43,10 @@ export default function AdmissionsPage() {
         pageSize: "20",
       });
       if (search) params.set("search", search);
+      if (year) {
+        params.set("dateFrom", `${year}-01-01`);
+        params.set("dateTo", `${year}-12-31`);
+      }
       const { data } = await api.get(`/leads?${params.toString()}`);
       return data.data as {
         leads: any[];
@@ -82,6 +94,23 @@ export default function AdmissionsPage() {
             className="w-full pl-9 pr-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary"
           />
         </div>
+        <select
+          value={year}
+          onChange={(e) => {
+            setYear(e.target.value);
+            setPage(1);
+          }}
+          aria-label="Filter by year"
+          title="Filter by year"
+          className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+        >
+          <option value="">All Years</option>
+          {ADMISSION_YEAR_OPTIONS.map((optionYear) => (
+            <option key={optionYear} value={String(optionYear)}>
+              {optionYear}
+            </option>
+          ))}
+        </select>
       </div>
 
       {isLoading ? (

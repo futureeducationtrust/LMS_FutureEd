@@ -10,8 +10,12 @@ import type { LeadFilters } from "@/hooks/useLeads";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
+const YEAR_START = 2017;
 const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = Array.from({ length: 4 }, (_, i) => CURRENT_YEAR - i);
+const YEAR_OPTIONS = Array.from(
+  { length: CURRENT_YEAR - YEAR_START + 1 },
+  (_, i) => CURRENT_YEAR - i,
+);
 
 type Props = {
   filters: LeadFilters;
