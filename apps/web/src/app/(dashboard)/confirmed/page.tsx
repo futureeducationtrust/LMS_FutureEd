@@ -73,7 +73,7 @@ export default function ConfirmedLeadsPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            href="/direct-admission"
+            href="/direct-admissions"
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-medium hover:bg-emerald-100 transition-colors"
           >
             <Sparkles size={14} />

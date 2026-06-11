@@ -179,6 +179,7 @@ const COLUMN_MAP: Record<string, string> = {
   purpose: "purpose",
   interest: "purpose",
   remarks: "remarks",
+  remark: "remarks",
   notes: "remarks",
   note: "remarks",
   comment: "remarks",
@@ -555,7 +556,7 @@ export default function ImportPage() {
                         "#", "Student Name", "Phone", "Father Name",
                         "Email", "City", "State", "Qualification",
                         "School/College", "Year", "%", "Gender",
-                        "Course", "Source", "Status",
+                        "Course", "Source", "Remarks", "Status",
                       ].map((h) => (
                         <th
                           key={h}
@@ -583,6 +584,7 @@ export default function ImportPage() {
                         <td className="px-3 py-2 text-xs text-gray-500">{row.gender ?? "—"}</td>
                         <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{row.course ?? "—"}</td>
                         <td className="px-3 py-2 text-xs text-gray-500">{row.source ?? "—"}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500 max-w-[160px] truncate" title={row.remarks ?? ""}>{row.remarks ?? "—"}</td>
                         <td className="px-3 py-2">
                           <Badge variant="success">Ready</Badge>
                         </td>

@@ -145,8 +145,8 @@ export const LeadListQuerySchema = z.object({
   sourceId: z.string().cuid().optional(),
   branchId: z.string().cuid().optional(),
   search: z.string().trim().max(100).optional(),
-  dateFrom: z.string().datetime().optional(),
-  dateTo: z.string().datetime().optional(),
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional(),
   sortBy: z
     .enum(["createdAt", "studentName", "status", "nextFollowUpAt"])
     .default("createdAt"),

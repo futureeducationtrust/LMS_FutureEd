@@ -18,6 +18,7 @@ import {
   FileText,
   CheckCircle2,
   UserCircle,
+  ClipboardPlus,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useLogout } from "@/hooks/useAuthMutations";
@@ -49,6 +50,12 @@ const NAV_ITEMS: NavItem[] = [
     href: "/confirmed",
     icon: CheckCircle2,
     roles: [Role.ADMIN, Role.SUB_ADMIN, Role.EMPLOYEE],
+  },
+  {
+    label: "Direct Admission",
+    href: "/direct-admissions",
+    icon: ClipboardPlus,
+    roles: [Role.ADMIN, Role.SUB_ADMIN],
   },
   {
     label: "Analytics",
