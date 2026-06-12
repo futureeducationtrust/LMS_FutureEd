@@ -18,6 +18,7 @@ import {
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { extractApiError } from "@/lib/utils";
+import { useCourses } from "@/hooks/useCourses";
 
 type FormState = {
   studentName: string;
@@ -257,6 +258,8 @@ function SelectField({
 
 export default function DirectAdmissionsPage() {
   const router = useRouter();
+  const { data: coursesData } = useCourses();
+  const courses = (coursesData as Array<{ id: string; name: string; isActive: boolean }> | undefined)?.filter((c) => c.isActive) ?? [];
   const [stage, setStage] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [academic, setAcademic] = useState<Record<string, AcademicRow>>({
@@ -330,8 +333,7 @@ export default function DirectAdmissionsPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     setSaving(true);
     try {
       const { data } = await api.post("/leads/public/direct-admission", {
@@ -533,7 +535,7 @@ export default function DirectAdmissionsPage() {
         ))}
       </div>
 
-      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
         {/* ── Stage 1: Student & Family ── */}
         {stage === 1 && (
           <>
@@ -556,11 +558,24 @@ export default function DirectAdmissionsPage() {
                     type="date"
                     {...f("dateOfBirth")}
                   />
-                  <Field
-                    label="Course"
-                    placeholder="e.g. B.Tech CSE"
-                    {...f("course")}
-                  />
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-600">
+                      Course
+                    </label>
+                    <select
+                      title="Course"
+                      value={form.course}
+                      onChange={(e) => setForm((p) => ({ ...p, course: e.target.value }))}
+                      className="w-full rounded-lg border border-surface-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                    >
+                      <option value="">Select course...</option>
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </Section>
             </div>
@@ -1072,8 +1087,9 @@ export default function DirectAdmissionsPage() {
             </button>
           ) : (
             <button
-              type="submit"
+              type="button"
               disabled={saving}
+              onClick={() => void handleSubmit()}
               className="ml-auto flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-800 disabled:opacity-50"
             >
               {saving ? (
