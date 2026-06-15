@@ -106,11 +106,6 @@ export default function MetaIntegrationPage() {
   const [formId, setFormId] = useState("");
   const [since, setSince] = useState("");
 
-  const webhookUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin.replace("localhost:3000", "YOUR_API_URL")}/api/v1/meta/webhook`
-      : "/api/v1/meta/webhook";
-
   // Use env-aware URL
   const apiBase =
     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
@@ -360,7 +355,7 @@ export default function MetaIntegrationPage() {
             <Button
               onClick={() =>
                 void syncForm
-                  .mutateAsync({ formId, since: since || undefined })
+                  .mutateAsync({ formId, ...(since ? { since } : {}) })
                   .then(() => setSyncModal(false))
               }
               loading={syncForm.isPending}

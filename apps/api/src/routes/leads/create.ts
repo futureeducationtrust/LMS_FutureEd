@@ -5,7 +5,7 @@ import {
   buildDuplicateContinuation,
   buildLostLeadRevival,
 } from "@lms/core";
-import { LeadStatus, Role } from "@lms/types";
+import { LeadStatus } from "@lms/types";
 import { findDuplicateLeads } from "./service";
 import { CreateLeadSchema } from "@lms/types";
 import { validateBody } from "../../middleware/validate";

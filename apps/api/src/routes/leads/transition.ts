@@ -222,7 +222,7 @@ export async function transitionLeadRoute(
         let existingConfirmedApp: ExistingConfirmedDraft | null = null;
 
         if (shouldPrepareAdmissionDraft) {
-          existingConfirmedApp = await tx.confirmedApplication.findUnique({
+          existingConfirmedApp = (await tx.confirmedApplication.findUnique({
             where: { leadId: id },
             select: {
               id: true,
@@ -236,9 +236,9 @@ export async function transitionLeadRoute(
               fileNumber: true,
               academicRecords: { select: { level: true } },
             },
-          });
+          })) as ExistingConfirmedDraft | null;
 
-          const draftData = buildConfirmedDraftData(lead, existingConfirmedApp);
+          const draftData = buildConfirmedDraftData(lead as unknown as LeadDraftSource, existingConfirmedApp);
 
           if (existingConfirmedApp) {
             if (Object.keys(draftData).length > 0) {
@@ -248,7 +248,7 @@ export async function transitionLeadRoute(
               });
             }
           } else {
-            existingConfirmedApp = await tx.confirmedApplication.create({
+            existingConfirmedApp = (await tx.confirmedApplication.create({
               data: {
                 leadId: id,
                 ...draftData,
@@ -265,11 +265,11 @@ export async function transitionLeadRoute(
                 fileNumber: true,
                 academicRecords: { select: { level: true } },
               },
-            });
+            })) as ExistingConfirmedDraft;
           }
 
           const academicLevel = mapQualificationToAcademicLevel(
-            lead.qualification,
+            lead.qualification as QualificationLevel | null,
           );
           const hasAcademicSeedData = Boolean(
             academicLevel &&
@@ -280,7 +280,7 @@ export async function transitionLeadRoute(
           );
           const hasAcademicLevelAlready = Boolean(
             academicLevel &&
-              existingConfirmedApp.academicRecords.some(
+              existingConfirmedApp!.academicRecords.some(
                 (record) => record.level === academicLevel,
               ),
           );
@@ -288,7 +288,7 @@ export async function transitionLeadRoute(
           if (academicLevel && hasAcademicSeedData && !hasAcademicLevelAlready) {
             await tx.academicRecord.create({
               data: {
-                confirmedApplicationId: existingConfirmedApp.id,
+                confirmedApplicationId: existingConfirmedApp!.id,
                 level: academicLevel,
                 institution: lead.schoolCollege ?? null,
                 board: lead.boardUniversity ?? null,

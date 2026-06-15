@@ -202,8 +202,8 @@ function Field({
   type?: string;
   placeholder?: string;
   textarea?: boolean;
-  error?: string;
-  helperText?: string;
+  error?: string | undefined;
+  helperText?: string | undefined;
   min?: string | number;
   max?: string | number;
   maxLength?: number;
@@ -649,7 +649,7 @@ export default function DirectAdmissionsPage() {
                     type="date"
                     {...f("dateOfBirth")}
                     min="1940-01-01"
-                    max={new Date().toISOString().split("T")[0]}
+                    max={new Date().toISOString().split("T")[0] ?? ""}
                   />
                   <div>
                     <label className="mb-1 block text-xs font-medium text-gray-600">

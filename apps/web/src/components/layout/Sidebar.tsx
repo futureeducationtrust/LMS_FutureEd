@@ -177,7 +177,7 @@ export function Sidebar({ onClose }: Props) {
             <Link
               key={item.href}
               href={item.href}
-              onClick={onClose}
+              {...(onClose ? { onClick: onClose } : {})}
               aria-label={!isExpanded ? item.label : undefined}
               title={!isExpanded ? item.label : undefined}
               className={cn(

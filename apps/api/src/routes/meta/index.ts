@@ -144,19 +144,20 @@ async function handleLeadForm(
   const sourceId = await findMetaSourceId(fastify);
 
   // ── Step 8: Create lead via shared service ──
+  const adName = value.ad_name ?? metaLead.ad_name ?? null;
   await createLeadFromMeta(fastify, {
     studentName: mapped.studentName,
     phone: normalizedPhone,
-    email: mapped.email || undefined,
-    fatherName: mapped.fatherName || undefined,
-    city: mapped.city || undefined,
-    state: mapped.state || undefined,
-    qualification: mapped.qualification || undefined,
+    ...(mapped.email ? { email: mapped.email } : {}),
+    ...(mapped.fatherName ? { fatherName: mapped.fatherName } : {}),
+    ...(mapped.city ? { city: mapped.city } : {}),
+    ...(mapped.state ? { state: mapped.state } : {}),
+    ...(mapped.qualification ? { qualification: mapped.qualification } : {}),
     courseId,
     sourceId,
     isFromWhatsApp: false,
     metaLeadgenId: leadgenId,
-    metaAdName: value.ad_name ?? metaLead.ad_name ?? undefined,
+    ...(adName ? { metaAdName: adName } : {}),
     remarks: `Meta Lead Form${metaLead.form_name ? ` — ${metaLead.form_name}` : ""}`,
   });
 }
@@ -182,7 +183,7 @@ async function handleWhatsAppMessage(
     return;
   }
 
-  const { name, phone, waid, message, msgType, timestamp } = parsed;
+  const { name, waid, message, msgType } = parsed;
 
   // ── Step 3: Skip outbound echo (our own reply echoed back) ──
   if (isOutboundMessage(body)) {
@@ -338,10 +339,7 @@ export async function metaRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(200).send(challenge);
     }
 
-    fastify.log.warn("[meta-webhook] Verification failed", {
-      mode,
-      tokenMatch: token === config.meta.webhookVerifyToken,
-    });
+    fastify.log.warn({ mode, tokenMatch: token === config.meta.webhookVerifyToken }, "[meta-webhook] Verification failed");
     return reply.status(403).send({ error: "Forbidden" });
   });
 
@@ -616,15 +614,15 @@ export async function metaRoutes(fastify: FastifyInstance): Promise<void> {
         const result = await createLeadFromMeta(fastify, {
           studentName: mapped.studentName,
           phone: normalizedPhone,
-          email: mapped.email || undefined,
-          fatherName: mapped.fatherName || undefined,
-          city: mapped.city || undefined,
-          state: mapped.state || undefined,
+          ...(mapped.email ? { email: mapped.email } : {}),
+          ...(mapped.fatherName ? { fatherName: mapped.fatherName } : {}),
+          ...(mapped.city ? { city: mapped.city } : {}),
+          ...(mapped.state ? { state: mapped.state } : {}),
           courseId,
           sourceId,
           isFromWhatsApp: false,
           metaLeadgenId: item.id,
-          metaAdName: item.ad_name,
+          ...(item.ad_name ? { metaAdName: item.ad_name } : {}),
         });
 
         if ("created" in result && result.created) stats.created++;

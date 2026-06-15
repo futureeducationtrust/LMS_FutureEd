@@ -288,7 +288,6 @@ export async function createLeadFromMeta(
       });
 
       // Initial interaction log
-      const source = data.isFromWhatsApp ? "WhatsApp" : "Meta Lead Form";
       const initialNote = data.isFromWhatsApp
         ? `Lead created from WhatsApp. First message: ${(data.waFirstMessage ?? "(no text)").slice(0, 500)}`
         : `Lead created from Meta Lead Form${data.metaAdName ? ` (Ad: ${data.metaAdName})` : ""}`;

@@ -122,7 +122,7 @@ export async function bulkLeadRoutes(fastify: FastifyInstance): Promise<void> {
               userId,
               type: "STATUS_CHANGED" as const,
               note: note ?? "Bulk status change",
-              statusBefore: statusBefore[leadId],
+              statusBefore: statusBefore[leadId] ?? null,
               statusAfter: toStatus,
             })),
           });

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import dayjs from "dayjs";
-import { ArrowLeft, User, Clock, Pencil, MessageSquare, ExternalLink } from "lucide-react";
+import { ArrowLeft, User, Clock, Pencil, ExternalLink } from "lucide-react";
 import { useLeadDetail, useLeadInteractions } from "@/hooks/useLeadDetail";
 import { InteractionTimeline } from "@/components/leads/InteractionTimeline";
 import { AddInteractionForm } from "@/components/leads/AddInteractionForm";
