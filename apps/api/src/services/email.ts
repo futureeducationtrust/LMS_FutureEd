@@ -45,11 +45,14 @@ export async function verifyEmailConnection(): Promise<boolean> {
   }
 
   try {
-    await transporter.verify();
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("SMTP verify timed out after 8s")), 8000),
+    );
+    await Promise.race([transporter.verify(), timeout]);
     console.log("✓ Email service connected");
     return true;
   } catch (error) {
-    console.error("✗ Email service failed:", error);
+    console.error("✗ Email service failed:", error instanceof Error ? error.message : error);
     return false;
   }
 }

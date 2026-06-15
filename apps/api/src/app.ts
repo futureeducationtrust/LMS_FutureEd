@@ -13,7 +13,8 @@ async function main() {
   fastify.addHook("onReady", async () => {
     startFollowUpCron(fastify);
     notificationWorker = startNotificationWorker(fastify.redis as any);
-    await verifyEmailConnection();
+    // Fire-and-forget — SMTP verify is diagnostic only and must not block startup
+    void verifyEmailConnection();
   });
 
   fastify.addHook("onClose", async () => {
