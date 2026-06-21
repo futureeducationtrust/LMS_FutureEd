@@ -13,6 +13,7 @@ import {
   Pencil,
   AlertCircle,
   StickyNote,
+  Clock,
 } from "lucide-react";
 import { InteractionType, Role } from "@lms/types";
 import { useEditInteraction } from "@/hooks/useLeadDetail";
@@ -84,6 +85,14 @@ const TYPE_CONFIG: Record<
     label: "SMS",
   },
 };
+
+function formatDuration(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  if (m === 0) return `${s}s`;
+  if (s === 0) return `${m}m`;
+  return `${m}m ${s}s`;
+}
 
 function groupByDate(interactions: Interaction[]) {
   const groups: Record<string, Interaction[]> = {};
@@ -161,11 +170,19 @@ function InteractionItem({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs font-semibold text-gray-700">
               {interaction.user.name}
             </span>
-            <span className="text-xs text-gray-400 ml-2">{config.label}</span>
+            <span className="text-xs text-gray-400">{config.label}</span>
+            {interaction.type === InteractionType.CALL &&
+              interaction.callDurationSecs != null &&
+              interaction.callDurationSecs > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-100 font-medium">
+                  <Clock size={9} />
+                  {formatDuration(interaction.callDurationSecs)}
+                </span>
+              )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <span

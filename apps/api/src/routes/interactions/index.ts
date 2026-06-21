@@ -426,4 +426,85 @@ export async function interactionRoutes(
       });
     },
   );
+
+  // ─────────────────────────────────────────
+  // GET /me/call-stats
+  // Returns today's call count, total call minutes, and daily breakdown
+  // for the last 7 days — for the authenticated user (any role).
+  // ─────────────────────────────────────────
+  fastify.get(
+    "/me/call-stats",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: userId } = request.user;
+
+      const now = new Date();
+      const todayStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+      );
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(
+        todayStart.getTime() - 6 * 24 * 60 * 60 * 1000,
+      );
+
+      const interactions = await fastify.prisma.interactionLog.findMany({
+        where: {
+          userId,
+          type: "CALL",
+          isDeleted: false,
+          createdAt: { gte: sevenDaysAgo, lt: todayEnd },
+        },
+        select: { callDurationSecs: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      });
+
+      // Build daily buckets for the last 7 days
+      const dailyMap = new Map<
+        string,
+        { callCount: number; totalMinutes: number }
+      >();
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(sevenDaysAgo.getTime() + d * 24 * 60 * 60 * 1000);
+        const key = date.toISOString().slice(0, 10);
+        dailyMap.set(key, { callCount: 0, totalMinutes: 0 });
+      }
+
+      let callsToday = 0;
+      let secondsToday = 0;
+
+      for (const row of interactions) {
+        const key = row.createdAt.toISOString().slice(0, 10);
+        const bucket = dailyMap.get(key);
+        if (bucket) {
+          bucket.callCount++;
+          bucket.totalMinutes += row.callDurationSecs ?? 0;
+        }
+        const todayKey = todayStart.toISOString().slice(0, 10);
+        if (key === todayKey) {
+          callsToday++;
+          secondsToday += row.callDurationSecs ?? 0;
+        }
+      }
+
+      // Convert raw seconds in buckets to minutes
+      const daily = Array.from(dailyMap.entries()).map(
+        ([date, { callCount, totalMinutes }]) => ({
+          date,
+          callCount,
+          totalMinutes: Math.round(totalMinutes / 60),
+        }),
+      );
+
+      return reply.send({
+        success: true,
+        data: {
+          callsToday,
+          minutesToday: Math.round(secondsToday / 60),
+          daily,
+        },
+      });
+    },
+  );
 }

@@ -126,3 +126,23 @@ export function useMyFollowUps() {
     refetchInterval: 5 * 60_000,
   });
 }
+
+// ── Employee call stats (today's calls, minutes, 7-day daily breakdown) ──
+export type DailyCallStat = { date: string; callCount: number; totalMinutes: number };
+export type MyCallStats = {
+  callsToday: number;
+  minutesToday: number;
+  daily: DailyCallStat[];
+};
+
+export function useMyCallStats() {
+  return useQuery({
+    queryKey: ["me", "call-stats"],
+    queryFn: async () => {
+      const { data } = await api.get<ApiResponse<MyCallStats>>(`/me/call-stats`);
+      return data.data as MyCallStats;
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}

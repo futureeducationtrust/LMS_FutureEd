@@ -108,16 +108,6 @@ export function buildLeadWhereClause(params: {
         { createdById: userId },
       ],
     })
-    // Confirmed leads fade out for employees after 1 hour
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    andClauses.push({
-      NOT: {
-        AND: [
-          { status: 'CONFIRMED' },
-          { confirmedAt: { lt: oneHourAgo } },
-        ],
-      },
-    })
   }
 
   // ── Status filter ──

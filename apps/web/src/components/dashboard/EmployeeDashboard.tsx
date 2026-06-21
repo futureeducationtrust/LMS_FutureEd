@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Users, CheckCircle2, Clock, TrendingUp } from "lucide-react";
+import { Users, CheckCircle2, Clock, TrendingUp, Phone, Timer } from "lucide-react";
 import { StatCard } from "./StatCard";
 import { FollowUpsDueToday } from "./FollowUpsDueToday";
 import { ActivityFeed } from "./ActivityFeed";
 import { PeriodSelector } from "./PeriodSelector";
+import { EmployeeCallChart } from "./EmployeeCallChart";
 import { StatusBadge } from "@/components/leads/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth";
 import api from "@/lib/api";
 import type { Period } from "@/hooks/useDashboard";
+import { useMyCallStats } from "@/hooks/useDashboard";
 import type { LeadStatus } from "@lms/types";
 type Lead = {
   id: string;
@@ -58,6 +60,9 @@ export function EmployeeDashboard() {
     refetchInterval: 60_000,
   });
 
+  // Call performance stats
+  const { data: callStats } = useMyCallStats();
+
   const myLeads = myLeadsData?.leads ?? [];
   const myTotal = myLeadsData?.total ?? 0;
 
@@ -71,6 +76,9 @@ export function EmployeeDashboard() {
 
   const convRate = myTotal > 0 ? Math.round((confirmed / myTotal) * 100) : 0;
 
+  const callsToday = callStats?.callsToday ?? 0;
+  const minutesToday = callStats?.minutesToday ?? 0;
+
   return (
     <div className="space-y-6">
       {/* Period selector */}
@@ -79,7 +87,7 @@ export function EmployeeDashboard() {
         <PeriodSelector value={period} onChange={setPeriod} />
       </div>
 
-      {/* Stats */}
+      {/* Lead stats */}
       {isLoading ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -125,6 +133,27 @@ export function EmployeeDashboard() {
           />
         </div>
       )}
+
+      {/* Today's call performance cards */}
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard
+          title="Calls Today"
+          value={callsToday}
+          subtitle={callsToday === 1 ? "1 call logged" : `${callsToday} calls logged`}
+          icon={<Phone size={16} className="text-blue-600" />}
+          colorVariant="blue"
+        />
+        <StatCard
+          title="Minutes Talked Today"
+          value={minutesToday}
+          subtitle={minutesToday === 0 ? "No duration logged" : `${minutesToday} min on calls`}
+          icon={<Timer size={16} className="text-purple-600" />}
+          colorVariant="orange"
+        />
+      </div>
+
+      {/* Call activity chart */}
+      <EmployeeCallChart />
 
       {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
