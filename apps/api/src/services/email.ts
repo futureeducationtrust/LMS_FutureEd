@@ -1,17 +1,24 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config";
 
-// Embed logo as base64 at startup so it works in any environment with no external URL
+// Try several candidate paths so this works both locally (tsx) and on Render
 function loadLogoDataUri(): string | null {
-  try {
-    const logoPath = path.resolve(__dirname, "../../public/logo.jpg");
-    const buf = fs.readFileSync(logoPath);
-    return `data:image/jpeg;base64,${buf.toString("base64")}`;
-  } catch {
-    return null;
+  const candidates = [
+    path.resolve(process.cwd(), "public/logo.jpg"),
+    path.resolve(__dirname, "../../public/logo.jpg"),
+    path.resolve(__dirname, "../public/logo.jpg"),
+  ];
+  for (const p of candidates) {
+    try {
+      const buf = fs.readFileSync(p);
+      return `data:image/jpeg;base64,${buf.toString("base64")}`;
+    } catch {
+      // try next candidate
+    }
   }
+  return null;
 }
 const LOGO_DATA_URI = loadLogoDataUri();
 
@@ -25,40 +32,20 @@ function esc(value: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-const transporter = nodemailer.createTransport({
-  host: config.smtp.host,
-  port: config.smtp.port,
-  secure: config.smtp.port === 465,
-  pool: true,        // reuse SMTP connection — only authenticates once
-  maxConnections: 1,
-  maxMessages: 100,
-  auth: {
-    user: config.smtp.user,
-    pass: config.smtp.pass.replace(/\s/g, ""), // Gmail app passwords tolerate spaces in UI but SMTP needs them stripped
-  },
-});
+const resend = new Resend(config.resendApiKey);
 
 export async function verifyEmailConnection(): Promise<boolean> {
-  if (!config.smtp.user || !config.smtp.pass) {
-    console.warn("⚠ Email not configured — set SMTP_USER and SMTP_PASS");
+  if (!config.resendApiKey) {
+    console.warn("⚠ Email not configured — set RESEND_API_KEY");
     return false;
   }
-
-  try {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("SMTP verify timed out after 8s")), 8000),
-    );
-    await Promise.race([transporter.verify(), timeout]);
-    console.log("✓ Email service connected");
-    return true;
-  } catch (error) {
-    console.error("✗ Email service failed:", error instanceof Error ? error.message : error);
-    return false;
-  }
+  console.log("✓ Email service ready (Resend)");
+  return true;
 }
 
 function htmlWrapper(content: string): string {
-  const logoUrl = LOGO_DATA_URI ?? config.logoUrl ?? null;
+  // Prefer a hosted URL (set LOGO_URL in env for production); fall back to base64 for local dev
+  const logoUrl = (config.logoUrl || null) ?? LOGO_DATA_URI;
 
   return `
   <!DOCTYPE html>
@@ -72,7 +59,7 @@ function htmlWrapper(content: string): string {
       .logo-img { display: block; width: 160px; height: auto; border: 0; }
       .title { font-size: 20px; font-weight: bold; color: #111827; margin-bottom: 8px; }
       .body { font-size: 14px; color: #374151; line-height: 1.6; }
-      .btn { display: inline-block; background: #005826; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0; }
+      .btn { display: inline-block; background: #005826; color: #ffffff !important; padding: 12px 24px; border-radius: 8px; text-decoration: none !important; font-weight: 600; margin: 16px 0; }
       .footer { font-size: 12px; color: #9ca3af; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 16px; }
       .highlight { background: #f0f9f4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
     </style>
@@ -94,25 +81,26 @@ type EmailPayload = {
 };
 
 async function send(payload: EmailPayload): Promise<void> {
-  if (!config.smtp.user || !config.smtp.pass) {
-    console.error("[EMAIL] SMTP_USER or SMTP_PASS not set — email skipped to:", payload.to);
+  if (!config.resendApiKey) {
+    console.error("[EMAIL] RESEND_API_KEY not set — email skipped to:", payload.to);
     return;
   }
 
   console.log(`[EMAIL] Sending "${payload.subject}" → ${payload.to}`);
 
-  try {
-    const info = await transporter.sendMail({
-      from: config.smtp.from,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-    });
-    console.log(`[EMAIL] Sent OK → ${payload.to} | messageId: ${info.messageId}`);
-  } catch (err) {
-    console.error(`[EMAIL] SEND FAILED → ${payload.to}:`, err instanceof Error ? err.message : err);
-    throw err; // re-throw so BullMQ marks the job as failed (triggers retry / failed event)
+  const { data, error } = await resend.emails.send({
+    from: config.smtp.from,
+    to: payload.to,
+    subject: payload.subject,
+    html: payload.html,
+  });
+
+  if (error) {
+    console.error(`[EMAIL] SEND FAILED → ${payload.to}:`, error.message);
+    throw new Error(error.message);
   }
+
+  console.log(`[EMAIL] Sent OK → ${payload.to} | id: ${data?.id}`);
 }
 
 export async function sendWelcomeSetupEmail(params: {
@@ -130,7 +118,7 @@ export async function sendWelcomeSetupEmail(params: {
         Your account has been created with the role of <strong>${esc(params.role)}</strong>.
         Please set your password to get started.
       </div>
-      <a href="${esc(params.setupUrl)}" class="btn">Set My Password</a>
+      <a href="${esc(params.setupUrl)}" class="btn" style="color:#ffffff;text-decoration:none;">Set My Password</a>
       <div class="body" style="color: #6b7280; font-size: 13px;">
         This link expires in 7 days. If you did not expect this email, please ignore it.
       </div>
@@ -149,7 +137,7 @@ export async function sendPasswordResetEmail(params: {
     html: htmlWrapper(`
       <div class="title">Password Reset Request</div>
       <div class="body">Hi ${esc(params.name)}, we received a request to reset your password.</div>
-      <a href="${esc(params.resetUrl)}" class="btn">Reset Password</a>
+      <a href="${esc(params.resetUrl)}" class="btn" style="color:#ffffff;text-decoration:none;">Reset Password</a>
       <div class="body" style="color: #6b7280; font-size: 13px;">
         This link expires in 1 hour. If you did not request this, ignore this email.
       </div>
@@ -172,7 +160,7 @@ export async function sendPasswordChangedEmail(params: {
         <strong>New Password:</strong> <code>${esc(params.newPassword)}</code>
       </div>
       <div class="body">Please login and change your password immediately.</div>
-      <a href="${esc(config.frontendUrl)}/login" class="btn">Login Now</a>
+      <a href="${esc(config.frontendUrl)}/login" class="btn" style="color:#ffffff;text-decoration:none;">Login Now</a>
     `),
   });
 }
@@ -212,7 +200,7 @@ export async function sendLeadAssignedEmail(params: {
         <strong>Student:</strong> ${esc(params.studentName)}<br>
         <strong>Phone:</strong> ${esc(params.phone)}
       </div>
-      <a href="${esc(params.leadUrl)}" class="btn">View Lead</a>
+      <a href="${esc(params.leadUrl)}" class="btn" style="color:#ffffff;text-decoration:none;">View Lead</a>
     `),
   });
 }
@@ -236,7 +224,7 @@ export async function sendFollowUpReminderEmail(params: {
         <strong>Phone:</strong> ${esc(params.phone)}<br>
         <strong>Overdue by:</strong> ${esc(params.overdueBy)}
       </div>
-      <a href="${esc(params.leadUrl)}" class="btn">Update Lead</a>
+      <a href="${esc(params.leadUrl)}" class="btn" style="color:#ffffff;text-decoration:none;">Update Lead</a>
     `),
   });
 }
@@ -285,7 +273,7 @@ export async function sendMetaLeadFormEmail(params: {
         ${params.email ? `<strong>Email:</strong> ${esc(params.email)}<br>` : ""}
         ${params.adName ? `<strong>Ad:</strong> ${esc(params.adName)}` : ""}
       </div>
-      <a href="${esc(params.leadUrl)}" class="btn">View Lead</a>
+      <a href="${esc(params.leadUrl)}" class="btn" style="color:#ffffff;text-decoration:none;">View Lead</a>
       <div class="body" style="color: #6b7280; font-size: 13px;">
         Please follow up promptly — Meta leads convert best within the first hour.
       </div>
@@ -322,7 +310,7 @@ export async function sendWhatsAppLeadEmail(params: {
         ${params.firstMessage ? `<strong>First Message:</strong> &ldquo;${esc(params.firstMessage)}&rdquo;<br>` : ""}
         ${timeStr ? `<strong>Time:</strong> ${esc(timeStr)}` : ""}
       </div>
-      <a href="${esc(params.leadUrl)}" class="btn" style="background: #128C7E;">View Lead</a>
+      <a href="${esc(params.leadUrl)}" class="btn" style="color:#ffffff;text-decoration:none;background:#128C7E;">View Lead</a>
       <div class="body" style="color: #6b7280; font-size: 13px;">
         Reply quickly — the student is likely waiting for a response on WhatsApp.
       </div>
@@ -365,9 +353,14 @@ export async function sendAdmissionFormEmail(params: {
   branchName: string;
   pdfBuffer: Buffer;
 }): Promise<void> {
-  if (!config.smtp.user || !config.smtp.pass) return;
+  if (!config.resendApiKey) return;
 
-  await transporter.sendMail({
+  const safeName = params.studentName
+    .replace(/[^\w\s\-]/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 80) || "student";
+
+  const { error } = await resend.emails.send({
     from: config.smtp.from,
     to: params.to,
     subject: `Admission Application — ${params.courseName} | Future Education`,
@@ -385,10 +378,11 @@ export async function sendAdmissionFormEmail(params: {
     `),
     attachments: [
       {
-        filename: `Admission-Form-${params.studentName.replace(/[^\w\s\-]/g, "").replace(/\s+/g, "-").slice(0, 80) || "student"}.pdf`,
+        filename: `Admission-Form-${safeName}.pdf`,
         content: params.pdfBuffer,
-        contentType: "application/pdf",
       },
     ],
   });
+
+  if (error) throw new Error(error.message);
 }

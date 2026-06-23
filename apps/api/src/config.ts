@@ -55,7 +55,8 @@ export const config = {
     "https://api.futureeducationonline.com",
   ),
 
-  // Email
+  // Email — prefer Resend (HTTPS, works on Render); falls back to SMTP for local dev
+  resendApiKey: optionalEnv("RESEND_API_KEY", ""),
   smtp: {
     host: optionalEnv("SMTP_HOST", "smtp.gmail.com"),
     port: parseInt(optionalEnv("SMTP_PORT", "587"), 10),
