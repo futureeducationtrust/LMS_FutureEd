@@ -5,10 +5,10 @@ import path from "node:path";
 import { config } from "../config";
 
 // ─────────────────────────────────────────────────────────────
-// Transport selection
-//   RESEND_API_KEY set  → Resend (HTTPS, works on Render)
-//   SMTP_USER + SMTP_PASS set → nodemailer SMTP (Brevo / local)
-//   Neither → emails are skipped with a warning
+// Transport selection (first match wins):
+//   RESEND_API_KEY  → Resend HTTPS API   (needs verified domain)
+//   BREVO_API_KEY   → Brevo HTTPS API    (just verify sender email, works on Render)
+//   SMTP_USER+PASS  → nodemailer SMTP    (local dev / non-Render hosting)
 // ─────────────────────────────────────────────────────────────
 const resendClient = config.resendApiKey ? new Resend(config.resendApiKey) : null;
 
@@ -62,6 +62,10 @@ export async function verifyEmailConnection(): Promise<boolean> {
     console.log("✓ Email service ready (Resend)");
     return true;
   }
+  if (config.brevoApiKey) {
+    console.log("✓ Email service ready (Brevo API)");
+    return true;
+  }
   if (smtpTransporter) {
     try {
       const timeout = new Promise<never>((_, reject) =>
@@ -75,7 +79,7 @@ export async function verifyEmailConnection(): Promise<boolean> {
       return false;
     }
   }
-  console.warn("⚠ Email not configured — set RESEND_API_KEY or SMTP_USER + SMTP_PASS");
+  console.warn("⚠ Email not configured — set RESEND_API_KEY, BREVO_API_KEY, or SMTP_USER+SMTP_PASS");
   return false;
 }
 
@@ -135,7 +139,39 @@ async function send(payload: EmailPayload): Promise<void> {
     return;
   }
 
-  // ── nodemailer SMTP fallback (Brevo / local) ──
+  // ── Brevo HTTP API (BREVO_API_KEY set — works on Render, just verify sender email) ──
+  if (config.brevoApiKey) {
+    // Parse "Name <email@domain>" → { name, email }
+    const fromMatch = config.smtp.from.match(/^(.*?)\s*<(.+)>$/);
+    const senderName  = fromMatch?.[1]?.replace(/^"|"$/g, "").trim() || "FutureEd LMS";
+    const senderEmail = fromMatch?.[2]?.trim() || config.smtp.from;
+
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": config.brevoApiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: payload.to }],
+        subject: payload.subject,
+        htmlContent: payload.html,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[EMAIL] Brevo API FAILED → ${payload.to}:`, body);
+      throw new Error(`Brevo API error ${res.status}: ${body}`);
+    }
+
+    const result = await res.json() as { messageId?: string };
+    console.log(`[EMAIL] Sent via Brevo API → ${payload.to} | messageId: ${result.messageId}`);
+    return;
+  }
+
+  // ── nodemailer SMTP fallback (local dev only) ──
   if (smtpTransporter) {
     try {
       const info = await smtpTransporter.sendMail({
@@ -405,7 +441,7 @@ export async function sendAdmissionFormEmail(params: {
   branchName: string;
   pdfBuffer: Buffer;
 }): Promise<void> {
-  if (!resendClient && !smtpTransporter) return;
+  if (!resendClient && !config.brevoApiKey && !smtpTransporter) return;
 
   const safeName = params.studentName
     .replace(/[^\w\s\-]/g, "")
@@ -436,6 +472,26 @@ export async function sendAdmissionFormEmail(params: {
       attachments: [{ filename, content: params.pdfBuffer }],
     });
     if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (config.brevoApiKey) {
+    const fromMatch = config.smtp.from.match(/^(.*?)\s*<(.+)>$/);
+    const senderName  = fromMatch?.[1]?.replace(/^"|"$/g, "").trim() || "FutureEd LMS";
+    const senderEmail = fromMatch?.[2]?.trim() || config.smtp.from;
+
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "api-key": config.brevoApiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sender: { name: senderName, email: senderEmail },
+        to: [{ email: params.to }],
+        subject,
+        htmlContent: html,
+        attachment: [{ name: filename, content: params.pdfBuffer.toString("base64") }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Brevo API error ${res.status}: ${await res.text()}`);
     return;
   }
 
