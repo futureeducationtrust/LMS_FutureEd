@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
 import { authorize } from "../../middleware/authorize";
 import { canViewLead, canUpdateLead } from "@lms/auth";
-import { canEmployeeSeeConfirmedLead, transitionLead } from "@lms/core";
+import { transitionLead } from "@lms/core";
 import { LeadStatus, Role, QualificationLevel } from "@lms/types";
 import { leadListRoute } from "./list";
 import { createLeadRoute } from "./create";

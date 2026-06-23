@@ -51,7 +51,7 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
   const { data: interactionsData } = useLeadInteractions(leadId);
   const todayCallSecs = (interactionsData?.interactions ?? [])
     .filter(
-      (i: { type: string; callDurationSecs: number | null; createdAt: string }) =>
+      (i: { type: string; callDurationSecs: number | null; createdAt: Date | string }) =>
         i.type === "CALL" &&
         i.callDurationSecs != null &&
         dayjs(i.createdAt).isSame(dayjs(), "day"),
@@ -134,11 +134,12 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
 
     if (timerRunning) stopTimer();
 
+    const dur = type === InteractionType.CALL ? getDurationSecs() : undefined;
     await addInteraction.mutateAsync({
       type,
       ...(note.trim() && { note: note.trim() }),
       ...(recordingUrl && { callRecordingUrl: recordingUrl }),
-      ...(type === InteractionType.CALL && { callDurationSecs: getDurationSecs() }),
+      ...(dur !== undefined && { callDurationSecs: dur }),
     });
 
     setNote("");
