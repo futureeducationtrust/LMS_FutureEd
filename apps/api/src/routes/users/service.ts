@@ -72,12 +72,14 @@ export async function createUser(params: {
       isSetupLink: true,
     })
 
+    const setupUrl = `${config.frontendUrl}/setup-password?token=${token}`
+    console.log(`[USER CREATE] Queueing welcome-email → ${user.email} | setupUrl: ${setupUrl}`)
     // Queue welcome email with setup link
     await fastify.queues[QUEUES.NOTIFICATIONS].add('welcome-email', {
       to: user.email,
       name: user.name,
       role: user.role,
-      setupUrl: `${config.frontendUrl}/setup-password?token=${token}`,
+      setupUrl,
     })
   }
 

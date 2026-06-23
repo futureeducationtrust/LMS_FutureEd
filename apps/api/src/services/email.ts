@@ -34,7 +34,7 @@ const transporter = nodemailer.createTransport({
   maxMessages: 100,
   auth: {
     user: config.smtp.user,
-    pass: config.smtp.pass,
+    pass: config.smtp.pass.replace(/\s/g, ""), // Gmail app passwords tolerate spaces in UI but SMTP needs them stripped
   },
 });
 
@@ -94,14 +94,25 @@ type EmailPayload = {
 };
 
 async function send(payload: EmailPayload): Promise<void> {
-  if (!config.smtp.user || !config.smtp.pass) return;
+  if (!config.smtp.user || !config.smtp.pass) {
+    console.error("[EMAIL] SMTP_USER or SMTP_PASS not set — email skipped to:", payload.to);
+    return;
+  }
 
-  await transporter.sendMail({
-    from: config.smtp.from,
-    to: payload.to,
-    subject: payload.subject,
-    html: payload.html,
-  });
+  console.log(`[EMAIL] Sending "${payload.subject}" → ${payload.to}`);
+
+  try {
+    const info = await transporter.sendMail({
+      from: config.smtp.from,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+    });
+    console.log(`[EMAIL] Sent OK → ${payload.to} | messageId: ${info.messageId}`);
+  } catch (err) {
+    console.error(`[EMAIL] SEND FAILED → ${payload.to}:`, err instanceof Error ? err.message : err);
+    throw err; // re-throw so BullMQ marks the job as failed (triggers retry / failed event)
+  }
 }
 
 export async function sendWelcomeSetupEmail(params: {

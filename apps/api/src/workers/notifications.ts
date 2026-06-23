@@ -20,6 +20,7 @@ export function startNotificationWorker(connection: Redis): Worker {
     "notifications",
     async (job) => {
       const { name, data } = job;
+      console.log(`[EMAIL WORKER] Processing job: ${name} → to: ${data.to ?? "(no to)"}`);
 
       switch (name) {
         case "welcome-email":
@@ -126,8 +127,10 @@ export function startNotificationWorker(connection: Redis): Worker {
           break;
 
         default:
-          console.log(`Unknown job: ${name}`);
+          console.warn(`[EMAIL WORKER] Unknown job: ${name}`);
       }
+
+      console.log(`[EMAIL WORKER] Done: ${name} → ${data.to ?? "(no to)"}`);
     },
     {
       connection,
@@ -136,7 +139,11 @@ export function startNotificationWorker(connection: Redis): Worker {
   );
 
   worker.on("failed", (job, err) => {
-    console.error(`Email job failed [${job?.name}]:`, err.message);
+    console.error(`[EMAIL WORKER] Job FAILED [${job?.name}] to=${job?.data?.to}:`, err.message);
+  });
+
+  worker.on("error", (err) => {
+    console.error("[EMAIL WORKER] Worker error:", err.message);
   });
 
   return worker;
