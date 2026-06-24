@@ -85,6 +85,9 @@ export function buildLeadWhereClause(params: {
   userRole: Role
   filters: {
     status?: LeadStatus
+    statuses?: LeadStatus[]     // multi-status filter — takes priority over single status
+    interactionType?: string    // leads with at least one interaction of this type (any user)
+    interactedByUserId?: string // leads where this specific user logged any non-status interaction
     assignedToId?: string
     courseId?: string
     sourceId?: string
@@ -116,8 +119,13 @@ export function buildLeadWhereClause(params: {
   // have their own dedicated tabs).
   if (filters.search) {
     // global search — no status restriction
+  } else if (filters.statuses && filters.statuses.length > 0) {
+    andClauses.push({ status: { in: filters.statuses } })
   } else if (filters.status) {
     andClauses.push({ status: filters.status })
+  } else if (filters.assignedToId && filters.assignedToId !== 'unassigned') {
+    // When drilling into a specific employee's leads (e.g. from admin dashboard), show all statuses
+    // so the count matches what the analytics panel shows.
   } else {
     andClauses.push({ status: { notIn: ['CONFIRMED', 'INTERESTED'] } })
   }
@@ -137,6 +145,18 @@ export function buildLeadWhereClause(params: {
 
   if (filters.courseId) {
     andClauses.push({ courses: { some: { courseId: filters.courseId } } })
+  }
+
+  // ── Interaction filters ──
+  if (filters.interactionType) {
+    andClauses.push({
+      interactions: { some: { type: filters.interactionType, isDeleted: false } }
+    })
+  }
+  if (filters.interactedByUserId) {
+    andClauses.push({
+      interactions: { some: { userId: filters.interactedByUserId, isDeleted: false, type: { not: 'STATUS_CHANGED' } } }
+    })
   }
 
   // ── Full-DB search (name, phone, email, father name, location) ──

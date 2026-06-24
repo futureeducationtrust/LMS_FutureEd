@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import type { ApexOptions } from "apexcharts";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
@@ -13,9 +14,12 @@ type DayActivity = {
 };
 
 export function EmployeeActivityChart({ data }: { data: DayActivity[] | undefined }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const hasActivity = data?.some((d) => d.interactions > 0 || d.calls > 0);
 
-  if (!data?.length || !hasActivity) {
+  if (!mounted || !data?.length || !hasActivity) {
     return (
       <div className="flex items-center justify-center h-20 text-xs text-gray-400">
         No activity in the last 7 days
@@ -23,18 +27,23 @@ export function EmployeeActivityChart({ data }: { data: DayActivity[] | undefine
     );
   }
 
-  const labels = data.map((d) => {
+  const numDays = data.length;
+  // Show fewer labels when there are many bars (every Nth label)
+  const labelStep = numDays <= 7 ? 1 : numDays <= 30 ? 5 : 15;
+
+  const labels = data.map((d, idx) => {
+    if (idx % labelStep !== 0) return "";
     const [, m, day] = d.date.split("-");
     return `${day}/${m}`;
   });
 
   const options: ApexOptions = {
     chart: { type: "bar", toolbar: { show: false }, sparkline: { enabled: false }, animations: { enabled: false } },
-    plotOptions: { bar: { columnWidth: "55%", borderRadius: 3 } },
+    plotOptions: { bar: { columnWidth: numDays <= 7 ? "55%" : numDays <= 30 ? "70%" : "85%", borderRadius: numDays <= 30 ? 3 : 2 } },
     colors: ["#6366f1", "#10b981"],
     xaxis: {
       categories: labels,
-      labels: { style: { fontSize: "10px", colors: "#9ca3af" } },
+      labels: { style: { fontSize: "10px", colors: "#9ca3af" }, hideOverlappingLabels: true },
       axisBorder: { show: false },
       axisTicks: { show: false },
     },
@@ -49,6 +58,10 @@ export function EmployeeActivityChart({ data }: { data: DayActivity[] | undefine
     },
     tooltip: {
       theme: "light",
+      x: { formatter: (_: number, opts?: { dataPointIndex?: number }) => {
+        const d = data[opts?.dataPointIndex ?? 0];
+        return d ? d.date : "";
+      }},
       y: { formatter: (v: number) => String(v) },
     },
     dataLabels: { enabled: false },
@@ -64,7 +77,7 @@ export function EmployeeActivityChart({ data }: { data: DayActivity[] | undefine
       type="bar"
       options={options}
       series={series}
-      height={130}
+      height={numDays <= 7 ? 130 : 160}
       width="100%"
     />
   );

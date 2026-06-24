@@ -26,11 +26,24 @@ type Props = {
 export function LeadFilters({ filters, onChange, onReset }: Props) {
   const { user } = useAuthStore();
   const isManager = user?.role === Role.ADMIN || user?.role === Role.SUB_ADMIN;
-  const [showMore, setShowMore] = useState(
-    () => !!filters.assignedToId || !!filters.status || !!filters.sourceId,
-  );
+  // manualOpen tracks user toggle; auto-expand when any filter is active (e.g. from URL params)
+  const [manualOpen, setManualOpen] = useState(false);
+  const showMore =
+    manualOpen ||
+    !!filters.assignedToId ||
+    !!filters.status ||
+    !!filters.statuses ||
+    !!filters.sourceId ||
+    !!filters.dateFrom;
 
-  const selectedYear = filters.dateFrom?.slice(0, 4) ?? "";
+  // A year-range selection sets dateFrom=YYYY-01-01 + dateTo=YYYY-12-31 exactly.
+  // A specific date from the date picker sets only dateFrom — don't treat that as a year selection.
+  const isYearRange =
+    !!filters.dateFrom &&
+    !!filters.dateTo &&
+    filters.dateFrom === `${filters.dateFrom.slice(0, 4)}-01-01` &&
+    filters.dateTo === `${filters.dateFrom.slice(0, 4)}-12-31`;
+  const selectedYear = isYearRange ? (filters.dateFrom?.slice(0, 4) ?? "") : "";
 
   function handleYearChange(year: string) {
     if (!year) {
@@ -109,7 +122,7 @@ export function LeadFilters({ filters, onChange, onReset }: Props) {
         </div>
 
         <button
-          onClick={() => setShowMore(!showMore)}
+          onClick={() => setManualOpen(!showMore)}
           className={cn(
             "flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors",
             showMore
@@ -274,24 +287,49 @@ export function LeadFilters({ filters, onChange, onReset }: Props) {
             ))}
           </select>
 
-          {/* Date from (custom range) */}
-          {!selectedYear && (
-            <input
-              type="date"
-              value={filters.dateFrom ?? ""}
-              aria-label="Filter from date"
-              title="Filter from date"
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value) {
-                  onChange({ ...filters, dateFrom: value, page: 1 });
-                  return;
-                }
-                const { dateFrom: _dateFrom, ...rest } = filters;
-                onChange({ ...rest, page: 1 });
-              }}
-              className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
-            />
+          {/* Date range — hidden when a full-year is selected from the year dropdown */}
+          {!isYearRange && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400 font-medium px-0.5">From</label>
+              <input
+                type="date"
+                value={filters.dateFrom ?? ""}
+                aria-label="Filter from date"
+                title="From date"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value) {
+                    onChange({ ...filters, dateFrom: value, page: 1 });
+                    return;
+                  }
+                  const { dateFrom: _df, dateTo: _dt, ...rest } = filters;
+                  onChange({ ...rest, page: 1 });
+                }}
+                className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+              />
+            </div>
+          )}
+          {!isYearRange && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-400 font-medium px-0.5">To</label>
+              <input
+                type="date"
+                value={filters.dateTo ?? ""}
+                min={filters.dateFrom}
+                aria-label="Filter to date"
+                title="To date"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value) {
+                    onChange({ ...filters, dateTo: value, page: 1 });
+                    return;
+                  }
+                  const { dateTo: _dt, ...rest } = filters;
+                  onChange({ ...rest, page: 1 });
+                }}
+                className="px-3 py-2 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+              />
+            </div>
           )}
         </div>
       )}

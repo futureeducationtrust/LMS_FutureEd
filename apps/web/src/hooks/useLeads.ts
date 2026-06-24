@@ -30,6 +30,9 @@ export type LeadFilters = {
   page?: number;
   pageSize?: number;
   status?: LeadStatus;
+  statuses?: string;            // comma-separated e.g. "ATTEMPTED_CONTACT,CONNECTED"
+  interactionType?: string;     // e.g. "CALL" — leads with at least one of this type (any user)
+  interactedByUserId?: string; // leads where this specific user logged any interaction
   assignedToId?: string;
   courseId?: string;
   sourceId?: string;

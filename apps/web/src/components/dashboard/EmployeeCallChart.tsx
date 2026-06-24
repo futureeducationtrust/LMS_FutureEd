@@ -1,12 +1,15 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { useMyCallStats } from "@/hooks/useDashboard";
 
 const ApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 export function EmployeeCallChart() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const { data, isLoading } = useMyCallStats();
 
   const daily = data?.daily ?? [];
@@ -64,7 +67,7 @@ export function EmployeeCallChart() {
         My Call Activity — Last 7 Days
       </h3>
 
-      {isLoading ? (
+      {!mounted || isLoading ? (
         <div className="h-48 bg-surface-50 rounded animate-pulse" />
       ) : daily.every((d) => d.callCount === 0) ? (
         <div className="h-48 flex items-center justify-center text-sm text-gray-400">

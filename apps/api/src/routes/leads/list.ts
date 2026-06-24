@@ -41,7 +41,13 @@ export async function leadListRoute(fastify: FastifyInstance): Promise<void> {
       const assignedToId = role === "EMPLOYEE" ? undefined : query.assignedToId;
       const filters: Parameters<typeof buildLeadWhereClause>[0]["filters"] = {};
 
+      if (query.statuses) {
+        const parsed = query.statuses.split(",").map(s => s.trim()).filter(Boolean) as LeadStatus[];
+        if (parsed.length > 0) filters.statuses = parsed;
+      }
       if (query.status) filters.status = query.status as LeadStatus;
+      if (query.interactionType) filters.interactionType = query.interactionType;
+      if (query.interactedByUserId) filters.interactedByUserId = query.interactedByUserId;
       if (assignedToId) filters.assignedToId = assignedToId;
       if (query.courseId) filters.courseId = query.courseId;
       if (query.sourceId) filters.sourceId = query.sourceId;

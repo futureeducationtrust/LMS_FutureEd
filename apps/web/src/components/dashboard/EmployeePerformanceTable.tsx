@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Fragment } from "react";
+import Link from "next/link";
 import { useEmployeePerformance } from "@/hooks/useDashboard";
 import { PeriodSelector } from "./PeriodSelector";
 import { EmployeeActivityChart } from "./EmployeeActivityChart";
@@ -38,14 +39,16 @@ function StatMini({
   label,
   value,
   color,
+  href,
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
   color: string;
+  href?: string;
 }) {
-  return (
-    <div className="flex items-center gap-2 bg-white border border-surface-100 rounded-lg px-3 py-2 min-w-27.5">
+  const inner = (
+    <>
       <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", color)}>
         <Icon size={13} />
       </div>
@@ -53,26 +56,43 @@ function StatMini({
         <p className="text-xs text-gray-400 leading-none mb-0.5">{label}</p>
         <p className="text-sm font-semibold text-gray-800 leading-none">{value}</p>
       </div>
-    </div>
+    </>
   );
+
+  const base = "flex items-center gap-2 bg-white border border-surface-100 rounded-lg px-3 py-2 min-w-27.5";
+
+  if (href) {
+    return (
+      <Link href={href} className={cn(base, "hover:border-primary hover:bg-surface-50 transition-colors cursor-pointer")}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={base}>{inner}</div>;
 }
 
 function ExpandedRow({ emp }: { emp: EmployeeRow }) {
   const m = emp.metrics;
+  const id = emp.employee.id;
+  const base = `/leads?assignedToId=${id}`;
 
   return (
     <tr>
       <td colSpan={9} className="bg-surface-50 border-b border-surface-100 px-4 pb-4 pt-2">
+        <p className="text-xs text-gray-400 mb-2">Click any card to view those leads</p>
         <div className="flex flex-wrap gap-2 mb-3">
-          <StatMini icon={Phone}        label="Calls Made"       value={m.callCount ?? 0}               color="bg-blue-50 text-blue-600" />
-          <StatMini icon={Clock}        label="Call Minutes"     value={`${m.callMinutes ?? 0}m`}       color="bg-orange-50 text-orange-500" />
-          <StatMini icon={Users}        label="Leads Interacted" value={m.leadsInteracted ?? 0}         color="bg-violet-50 text-violet-600" />
-          <StatMini icon={CheckCircle2} label="Follow-up %"      value={`${m.followUpComplianceRate}%`} color="bg-teal-50 text-teal-600" />
-          <StatMini icon={AlertCircle}  label="Overdue"          value={m.overdueFollowUps}             color="bg-red-50 text-red-500" />
+          <StatMini icon={Users}        label="All Leads"  value={m.totalAssigned}          color="bg-gray-100 text-gray-600"    href={`${base}`} />
+          {/* Called = leads in ATTEMPTED_CONTACT or CONNECTED status */}
+          <StatMini icon={Phone}        label="Called"     value={m.callCount ?? 0}         color="bg-blue-50 text-blue-600"     href={`${base}&statuses=ATTEMPTED_CONTACT,CONNECTED`} />
+          <StatMini icon={Clock}        label="Call Mins"  value={`${m.callMinutes ?? 0}m`} color="bg-orange-50 text-orange-500" />
+          <StatMini icon={Users}        label="Interacted" value={m.leadsInteracted ?? 0}   color="bg-violet-50 text-violet-600" href={`${base}&interactedByUserId=${id}`} />
+          <StatMini icon={CheckCircle2} label="Confirmed"  value={m.confirmed}               color="bg-green-50 text-green-600"   href={`${base}&status=CONFIRMED`} />
+          <StatMini icon={AlertCircle}  label="Overdue"    value={m.overdueFollowUps}        color="bg-red-50 text-red-500"       href={`${base}&overdue=true`} />
+          <StatMini icon={AlertCircle}  label="Lost"       value={m.lost}                    color="bg-rose-50 text-rose-600"     href={`${base}&status=LOST`} />
         </div>
 
         <div className="bg-white border border-surface-100 rounded-lg p-2">
-          <p className="text-xs text-gray-400 font-medium mb-1 px-1">7-day activity</p>
+          <p className="text-xs text-gray-400 font-medium mb-1 px-1">Activity</p>
           <EmployeeActivityChart data={m.dailyActivity} />
         </div>
       </td>
@@ -85,11 +105,8 @@ export function EmployeePerformanceTable() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const { data, isLoading } = useEmployeePerformance(period);
 
-  const employees: EmployeeRow[] = Array.isArray(
-    (data as { employees?: unknown })?.employees,
-  )
-    ? ((data as { employees?: EmployeeRow[] }).employees ?? [])
-    : [];
+  const rawData = data as { employees?: EmployeeRow[] } | undefined;
+  const employees: EmployeeRow[] = Array.isArray(rawData?.employees) ? (rawData?.employees ?? []) : [];
 
   const headers = ["Employee", "Leads", "Confirmed", "Lost", "Calls", "Mins", "Interacted", "Conv %"];
 
@@ -140,7 +157,7 @@ export function EmployeePerformanceTable() {
                           ? <ChevronDown size={13} className="text-gray-400" />
                           : <ChevronRight size={13} className="text-gray-400" />}
                       </td>
-                      {/* name */}
+                      {/* name — clicking expands row */}
                       <td className="py-2.5 pr-4">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full bg-primary-100 flex items-center justify-center shrink-0">

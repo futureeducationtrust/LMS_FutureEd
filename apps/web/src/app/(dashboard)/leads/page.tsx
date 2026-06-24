@@ -53,6 +53,16 @@ export default function LeadsPage() {
     if (assignedToId) patch.assignedToId = assignedToId;
     const status = params.get("status") as LeadStatus | null;
     if (status) patch.status = status;
+    const statuses = params.get("statuses");
+    if (statuses) patch.statuses = statuses;
+    const interactionType = params.get("interactionType");
+    if (interactionType) patch.interactionType = interactionType;
+    const interactedByUserId = params.get("interactedByUserId");
+    if (interactedByUserId) patch.interactedByUserId = interactedByUserId;
+    const dateFrom = params.get("dateFrom");
+    if (dateFrom) patch.dateFrom = dateFrom;
+    const dateTo = params.get("dateTo");
+    if (dateTo) patch.dateTo = dateTo;
     const overdue = params.get("overdue");
     if (overdue === "true") patch.overdue = true;
     if (Object.keys(patch).length > 0) setFilters((prev) => ({ ...prev, ...patch }));

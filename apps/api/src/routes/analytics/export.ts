@@ -24,9 +24,10 @@ export function generatePerformancePDF(
         overdueFollowUps: number;
         followUpComplianceRate: number;
         performanceScore: number;
+        [key: string]: unknown;
       };
     }>;
-    period: { from: Date; to: Date };
+    period: { from: string | Date; to: string | Date };
   },
   stream: Writable,
 ): void {
@@ -43,7 +44,7 @@ export function generatePerformancePDF(
     .fontSize(10)
     .font("Helvetica")
     .text(
-      `Period: ${data.period.from.toDateString()} → ${data.period.to.toDateString()}`,
+      `Period: ${String(data.period.from)} → ${String(data.period.to)}`,
       { align: "center" },
     );
 
@@ -126,7 +127,7 @@ export function generateConfirmedPDF(
     .fontSize(10)
     .font("Helvetica")
     .text(
-      `Period: ${data.period.from.toDateString()} → ${data.period.to.toDateString()}`,
+      `Period: ${String(data.period.from)} → ${String(data.period.to)}`,
       { align: "center" },
     );
 

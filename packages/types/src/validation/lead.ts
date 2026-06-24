@@ -140,6 +140,9 @@ export const LeadListQuerySchema = z.object({
     })
     .default(20),
   status: z.nativeEnum(LeadStatus).optional(),
+  statuses: z.string().optional(), // comma-separated LeadStatus values e.g. "ATTEMPTED_CONTACT,CONNECTED"
+  interactionType: z.string().optional(), // e.g. "CALL" — leads with at least one interaction of this type
+  interactedByUserId: z.string().cuid().optional(), // leads where this specific user logged any (non-status) interaction
   assignedToId: z.union([z.literal("unassigned"), z.string().cuid()]).optional(),
   courseId: z.string().cuid().optional(),
   sourceId: z.string().cuid().optional(),

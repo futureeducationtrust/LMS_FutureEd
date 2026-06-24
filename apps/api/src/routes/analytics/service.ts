@@ -165,10 +165,9 @@ export async function getEmployeePerformance(params: {
 
   // Fetch all lead data in bulk — one query, process in JS
   // This avoids N+1 (one query per employee)
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const employeeIds = employees.map((e) => e.id);
 
-  const [allLeads, allInteractions, overdueLeads, allEmployeeInteractions, last7DayInteractions] =
+  const [allLeads, allInteractions, overdueLeads, allEmployeeInteractions] =
     await Promise.all([
       prisma.lead.findMany({
         where: {
@@ -228,22 +227,6 @@ export async function getEmployeePerformance(params: {
         },
       }),
 
-      // Last 7 days interactions for daily activity chart (always fixed window)
-      prisma.interactionLog.findMany({
-        where: {
-          userId: { in: employeeIds },
-          createdAt: { gte: sevenDaysAgo },
-          isDeleted: false,
-          type: { not: "STATUS_CHANGED" },
-        },
-        select: {
-          userId: true,
-          leadId: true,
-          type: true,
-          callDurationSecs: true,
-          createdAt: true,
-        },
-      }),
     ]);
 
   // Process in JS — group by employee
@@ -313,21 +296,26 @@ export async function getEmployeePerformance(params: {
       (i) => i.userId === employee.id,
     );
     const empCalls = empInteractions.filter((i) => i.type === "CALL");
-    const callCount = empCalls.length;
+
+    // callCount = leads currently in ATTEMPTED_CONTACT or CONNECTED status (status-based, not interaction-based)
+    // This matches the "Called" card link which filters by these statuses
+    const callCount = employeeLeads.filter(
+      (l) => l.status === "ATTEMPTED_CONTACT" || l.status === "CONNECTED",
+    ).length;
     const callMinutes = Math.round(
       empCalls.reduce((sum, i) => sum + (i.callDurationSecs ?? 0), 0) / 60,
     );
     const leadsInteracted = new Set(empInteractions.map((i) => i.leadId)).size;
 
-    // ── 7-day daily activity for sparkline chart ──
-    const empDailyLogs = last7DayInteractions.filter(
-      (i) => i.userId === employee.id,
-    );
-    const dailyActivity = Array.from({ length: 7 }, (_, idx) => {
-      const d = new Date(sevenDaysAgo);
-      d.setDate(d.getDate() + idx + 1);
+    // ── Daily activity chart — period-scoped (not fixed 7 days) ──
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const periodDays = Math.ceil((to.getTime() - from.getTime()) / msPerDay) + 1;
+
+    const dailyActivity = Array.from({ length: periodDays }, (_, idx) => {
+      const d = new Date(from);
+      d.setDate(d.getDate() + idx);
       const dateStr = d.toISOString().split("T")[0]!;
-      const dayLogs = empDailyLogs.filter(
+      const dayLogs = empInteractions.filter(
         (i) => i.createdAt.toISOString().split("T")[0] === dateStr,
       );
       const dayCalls = dayLogs.filter((i) => i.type === "CALL");
@@ -366,7 +354,13 @@ export async function getEmployeePerformance(params: {
     (a, b) => b.metrics.performanceScore - a.metrics.performanceScore,
   );
 
-  return { employees: metrics, period: { from, to } };
+  return {
+    employees: metrics,
+    period: {
+      from: from.toISOString().split("T")[0]!,
+      to: to.toISOString().split("T")[0]!,
+    },
+  };
 }
 
 // ═══════════════════════════════════════
