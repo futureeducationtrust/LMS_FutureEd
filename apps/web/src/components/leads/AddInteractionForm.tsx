@@ -41,6 +41,8 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
   const [manualMins, setManualMins] = useState("");
   const [manualSecs, setManualSecs] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Wall-clock start — persisted so elapsed time survives navigation
+  const timerStartAt = useRef<number | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -61,12 +63,39 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
       0,
     );
 
-  // Clean up timer on unmount
+  // Restore a running timer when the component mounts (survives tab switches / navigation)
   useEffect(() => {
+    function tick() {
+      if (timerStartAt.current !== null) {
+        setElapsedSecs(Math.floor((Date.now() - timerStartAt.current) / 1000));
+      }
+    }
+
+    // Recalculate immediately when the PWA returns from the dialer / background
+    function onVisible() {
+      if (document.visibilityState === "visible") tick();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
+    try {
+      const raw = sessionStorage.getItem("call-timer");
+      if (raw) {
+        const saved = JSON.parse(raw) as { leadId: string; timerStartAt: number };
+        if (saved.leadId === leadId) {
+          timerStartAt.current = saved.timerStartAt;
+          setElapsedSecs(Math.floor((Date.now() - saved.timerStartAt) / 1000));
+          setTimerRunning(true);
+          setType(InteractionType.CALL);
+          intervalRef.current = setInterval(tick, 1000);
+        }
+      }
+    } catch {}
+
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stop timer when switching away from CALL type
   useEffect(() => {
@@ -77,10 +106,17 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
   }, [type]);
 
   function startTimer() {
+    const now = Date.now();
+    timerStartAt.current = now;
+    try {
+      sessionStorage.setItem("call-timer", JSON.stringify({ leadId, timerStartAt: now }));
+    } catch {}
     setElapsedSecs(0);
     setTimerRunning(true);
     intervalRef.current = setInterval(() => {
-      setElapsedSecs((s) => s + 1);
+      if (timerStartAt.current !== null) {
+        setElapsedSecs(Math.floor((Date.now() - timerStartAt.current) / 1000));
+      }
     }, 1000);
   }
 
@@ -89,6 +125,8 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    timerStartAt.current = null;
+    try { sessionStorage.removeItem("call-timer"); } catch {}
     setTimerRunning(false);
     // Populate manual fields from elapsed time
     setManualMins(Math.floor(elapsedSecs / 60).toString());
