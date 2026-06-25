@@ -203,6 +203,15 @@ export function LeadSidebar({ lead }: { lead: Lead }) {
           <div className="flex items-center gap-2">
             <a
               href={`tel:${lead.phone}`}
+              onClick={() => {
+                try {
+                  const payload = { leadId: lead.id, timerStartAt: Date.now() };
+                  sessionStorage.setItem("call-timer", JSON.stringify(payload));
+                  window.dispatchEvent(
+                    new CustomEvent("call-started", { detail: payload }),
+                  );
+                } catch {}
+              }}
               className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-primary transition-colors flex-1"
             >
               <Phone size={14} className="text-gray-400" />
@@ -248,6 +257,7 @@ export function LeadSidebar({ lead }: { lead: Lead }) {
           </p>
           {canAssign && (
             <button
+              type="button"
               onClick={() => setShowAssignModal(true)}
               className="text-xs text-primary font-medium hover:underline"
             >

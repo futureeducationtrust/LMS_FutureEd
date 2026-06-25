@@ -63,36 +63,66 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
       0,
     );
 
-  // Restore a running timer when the component mounts (survives tab switches / navigation)
+  // Persist timer across navigation / dialer switches
   useEffect(() => {
+    type CallPayload = { leadId: string; timerStartAt: number };
+
     function tick() {
       if (timerStartAt.current !== null) {
         setElapsedSecs(Math.floor((Date.now() - timerStartAt.current) / 1000));
       }
     }
 
-    // Recalculate immediately when the PWA returns from the dialer / background
-    function onVisible() {
-      if (document.visibilityState === "visible") tick();
+    function activate(saved: CallPayload) {
+      if (saved.leadId !== leadId) return;
+      timerStartAt.current = saved.timerStartAt;
+      setElapsedSecs(Math.floor((Date.now() - saved.timerStartAt) / 1000));
+      setTimerRunning(true);
+      setType(InteractionType.CALL);
+      if (!intervalRef.current) {
+        intervalRef.current = setInterval(tick, 1000);
+      }
     }
-    document.addEventListener("visibilitychange", onVisible);
 
+    // Fired immediately when the phone number is tapped — works on web + PWA
+    function onCallStarted(e: Event) {
+      activate((e as CustomEvent<CallPayload>).detail);
+    }
+
+    // Fallback: returning from native dialer on mobile
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      if (timerStartAt.current !== null) {
+        tick();
+        return;
+      }
+      try {
+        const raw = sessionStorage.getItem("call-timer");
+        if (raw) activate(JSON.parse(raw) as CallPayload);
+      } catch {}
+    }
+
+    // Clear timer when the tab/PWA is truly closed (not just navigated away)
+    function onPageHide(e: PageTransitionEvent) {
+      if (!e.persisted) {
+        try { sessionStorage.removeItem("call-timer"); } catch {}
+      }
+    }
+
+    window.addEventListener("call-started", onCallStarted);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pagehide", onPageHide);
+
+    // Restore on mount (handles page reload while timer was running)
     try {
       const raw = sessionStorage.getItem("call-timer");
-      if (raw) {
-        const saved = JSON.parse(raw) as { leadId: string; timerStartAt: number };
-        if (saved.leadId === leadId) {
-          timerStartAt.current = saved.timerStartAt;
-          setElapsedSecs(Math.floor((Date.now() - saved.timerStartAt) / 1000));
-          setTimerRunning(true);
-          setType(InteractionType.CALL);
-          intervalRef.current = setInterval(tick, 1000);
-        }
-      }
+      if (raw) activate(JSON.parse(raw) as CallPayload);
     } catch {}
 
     return () => {
+      window.removeEventListener("call-started", onCallStarted);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pagehide", onPageHide);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
