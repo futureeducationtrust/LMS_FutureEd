@@ -140,6 +140,21 @@ export function useEmployeeList() {
   });
 }
 
+// ── Fetch all staff (employees + admin/sub-admin) for analytics filters ──
+export function useStaffList() {
+  return useQuery({
+    queryKey: ["users", "staff"],
+    queryFn: async () => {
+      const { data } = await api.get<{
+        success: true;
+        data: { users: Array<{ id: string; name: string; role: string }> };
+      }>("/users?isActive=true");
+      return data.data.users;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 // ── Get single lead ──
 export type Lead = LeadSummary & {
   dobDay: number;

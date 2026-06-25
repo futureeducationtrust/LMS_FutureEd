@@ -122,9 +122,9 @@ export async function computeEmployeeStats(params: {
   const now = new Date();
   const onlineThreshold = new Date(now.getTime() - 5 * 60 * 1000); // 5 min window
 
-  // Fetch all employees (no isActive filter — historical reports include deactivated)
+  // Fetch all staff (employees + admin/sub-admin) — historical reports include deactivated
   const employees = await prisma.user.findMany({
-    where: { ...branchFilter, ...employeeFilter, role: "EMPLOYEE" },
+    where: { ...branchFilter, ...employeeFilter, role: { in: ["EMPLOYEE", "ADMIN", "SUB_ADMIN"] } },
     select: {
       id: true,
       name: true,
@@ -534,7 +534,7 @@ export async function getCallReport(params: {
       createdAt: { gte: from, lte: to },
       ...(employeeId ? { userId: employeeId } : {}),
       ...(outcome ? { callOutcome: outcome as any } : {}),
-      user: { role: "EMPLOYEE", ...(branchId ? { branchId } : {}) },
+      user: { role: { in: ["EMPLOYEE", "ADMIN", "SUB_ADMIN"] }, ...(branchId ? { branchId } : {}) },
     },
     select: {
       id: true,

@@ -153,11 +153,11 @@ export async function getEmployeePerformance(params: {
 
   const branchFilter = branchId ? { branchId } : {};
 
-  // Fetch all active employees in branch
+  // Fetch all active staff in branch (employees + admin/sub-admin)
   const employees = await prisma.user.findMany({
     where: {
       ...branchFilter,
-      role: "EMPLOYEE",
+      role: { in: ["EMPLOYEE", "ADMIN", "SUB_ADMIN"] },
       isActive: true,
     },
     select: { id: true, name: true, email: true },

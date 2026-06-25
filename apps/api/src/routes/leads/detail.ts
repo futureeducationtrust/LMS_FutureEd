@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { authenticate } from '../../middleware/authenticate'
 import { canViewLead } from '@lms/auth'
 import { canEmployeeSeeConfirmedLead } from '@lms/core'
-import { LeadStatus, Role } from '@lms/types'
+import { Role } from '@lms/types'
 import { leadDetailSelect } from './service'
 
 export async function leadDetailRoute(fastify: FastifyInstance): Promise<void> {
@@ -43,15 +43,13 @@ export async function leadDetailRoute(fastify: FastifyInstance): Promise<void> {
       })
     }
 
-    // Confirmed lead visibility window for employees
-    if (role === 'EMPLOYEE' && lead.status === LeadStatus.CONFIRMED) {
+    // Employees can view confirmed leads they were involved with
+    if (role === 'EMPLOYEE') {
       const visible = canEmployeeSeeConfirmedLead({
         lead: {
           id: lead.id,
-          status: lead.status as LeadStatus,
           assignedToId: lead.assignedTo?.id ?? null,
           createdById: lead.createdBy.id,
-          confirmedAt: lead.confirmedAt,
           confirmedById: lead.confirmedById,
         },
         user: { id: userId, role: role as Role },
@@ -60,10 +58,7 @@ export async function leadDetailRoute(fastify: FastifyInstance): Promise<void> {
       if (!visible) {
         return reply.status(403).send({
           success: false,
-          error: {
-            code: 'FORBIDDEN',
-            message: 'This confirmed lead has been handed over to admin',
-          },
+          error: { code: 'FORBIDDEN', message: 'You do not have access to this lead' },
         })
       }
     }
