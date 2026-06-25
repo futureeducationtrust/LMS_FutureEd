@@ -60,6 +60,16 @@ const STATUS_DOT_CLASS: Record<string, string> = {
   DUPLICATE:            "bg-gray-300",
 };
 
+type PipelineItem = {
+  status: string;
+  count: number;
+};
+
+type SourceItem = {
+  total: number;
+  source: { name: string };
+};
+
 export default function PipelinePage() {
   const searchParams = useSearchParams();
   const router       = useRouter();
@@ -82,13 +92,18 @@ export default function PipelinePage() {
   const { data: pipelineData, isLoading: pLoading }  = usePipeline();
   const { data: sourceData,   isLoading: sLoading }   = useSourceReport(period);
 
-  const pipeline  = (pipelineData as any)?.data?.pipeline  ?? [];
-  const sources   = (sourceData   as any)?.data?.sources   ?? [];
+  const pipeline =
+    (pipelineData as { statusBreakdown?: PipelineItem[] } | undefined)
+      ?.statusBreakdown ?? [];
+  const sources =
+    ((sourceData as { sources?: SourceItem[] } | undefined)?.sources ?? []).filter(
+      (source) => source.total > 0,
+    );
   const isLoading = pLoading || sLoading;
 
-  const pipelineLabels = pipeline.map((s: any) => STATUS_LABELS[s.status] ?? s.status);
-  const pipelineCounts = pipeline.map((s: any) => s.count);
-  const pipelineColors = pipeline.map((s: any) => STATUS_CHART_COLORS[s.status] ?? "#6b7280");
+  const pipelineLabels = pipeline.map((s) => STATUS_LABELS[s.status] ?? s.status);
+  const pipelineCounts = pipeline.map((s) => s.count);
+  const pipelineColors = pipeline.map((s) => STATUS_CHART_COLORS[s.status] ?? "#6b7280");
 
   return (
     <ReportShell
@@ -139,9 +154,9 @@ export default function PipelinePage() {
               <Chart
                 type="donut"
                 height={260}
-                series={sources.map((s: any) => s.count)}
+                series={sources.map((s) => s.total)}
                 options={{
-                  labels:   sources.map((s: any) => s.source ?? "Direct / Other"),
+                  labels:   sources.map((s) => s.source.name || "Direct / Other"),
                   legend:   { position: "bottom", fontSize: "12px" },
                   plotOptions: { pie: { donut: { size: "65%" } } },
                   dataLabels: { formatter: (v: number) => `${Math.round(v)}%` },
@@ -170,7 +185,7 @@ export default function PipelinePage() {
                 </tr>
               </thead>
               <tbody>
-                {pipeline.map((s: any) => {
+                {pipeline.map((s) => {
                   const total = pipelineCounts.reduce((a: number, b: number) => a + b, 0);
                   const pct   = total > 0 ? Math.round((s.count / total) * 100) : 0;
                   return (
