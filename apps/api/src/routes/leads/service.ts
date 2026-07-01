@@ -100,6 +100,7 @@ export function buildLeadWhereClause(params: {
     upcoming?: boolean          // leads with nextFollowUpAt in the next 7 days
     showAllStatuses?: boolean   // bypass ALL status exclusion (Total Leads card)
     excludeTerminal?: boolean   // exclude only CONFIRMED/DUPLICATE/LOST — matches dashboard active count
+    excludeUnassigned?: boolean // only leads that have an assignee — leaderboard "Assigned" drill-throughs
     // Explicit opt-in for "confirmed during this window" (Admissions page /
     // dashboard's Confirmed Today). Without it, dateFrom/dateTo always means
     // "created during this window" — matching the cohort-style confirmedLeads
@@ -153,6 +154,8 @@ export function buildLeadWhereClause(params: {
     andClauses.push({ assignedToId: null })
   } else if (filters.assignedToId) {
     andClauses.push({ assignedToId: filters.assignedToId })
+  } else if (filters.excludeUnassigned) {
+    andClauses.push({ assignedToId: { not: null } })
   }
   if (filters.sourceId)     andClauses.push({ sourceId: filters.sourceId })
   if (filters.branchId)     andClauses.push({ branchId: filters.branchId })

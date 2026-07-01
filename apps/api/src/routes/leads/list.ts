@@ -39,9 +39,12 @@ export async function leadListRoute(fastify: FastifyInstance): Promise<void> {
       const sortBy = SORT_FIELDS[query.sortBy ?? "createdAt"] ?? "createdAt";
       const sortOrder = query.sortOrder === "asc" ? "asc" : "desc";
 
-      const { id: userId, role } = request.user;
+      const { id: userId, role, branchId: userBranchId } = request.user;
 
       const assignedToId = role === "EMPLOYEE" ? undefined : query.assignedToId;
+      // SUB_ADMIN is always scoped to their own branch — matches the analytics module's
+      // effectiveBranchId behavior so leaderboard drill-throughs reconcile with the report totals.
+      const effectiveBranchId = role === "SUB_ADMIN" ? userBranchId : query.branchId;
       const filters: Parameters<typeof buildLeadWhereClause>[0]["filters"] = {};
 
       if (query.statuses) {
@@ -57,12 +60,13 @@ export async function leadListRoute(fastify: FastifyInstance): Promise<void> {
       if (query.search) filters.search = query.search;
       if (query.dateFrom) filters.dateFrom = query.dateFrom;
       if (query.dateTo) filters.dateTo = query.dateTo;
-      if (role !== "EMPLOYEE" && query.branchId)
-        filters.branchId = query.branchId;
+      if (role !== "EMPLOYEE" && effectiveBranchId)
+        filters.branchId = effectiveBranchId;
       if (query.overdue) filters.overdue = true;
       if (rawQuery.upcoming === "true") filters.upcoming = true;
       if (showAllStatuses) filters.showAllStatuses = true;
       if (rawQuery.excludeTerminal === "true") filters.excludeTerminal = true;
+      if (rawQuery.excludeUnassigned === "true") filters.excludeUnassigned = true;
       if (rawQuery.dateBy === "confirmedAt") filters.dateBy = "confirmedAt";
 
       const where = buildLeadWhereClause({

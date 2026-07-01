@@ -16,7 +16,7 @@
  */
 
 import type { PrismaClient } from "@lms/db";
-import { getDateRange } from "./helpers";
+import { getDateRange, toISTDateString } from "./helpers";
 import type { Period } from "./helpers";
 
 // ── IST offset — India Standard Time is UTC+5:30.
@@ -340,8 +340,8 @@ export async function getLeaderboard(params: {
   const prev = await computeEmployeeStats({
     ...params,
     period: "custom",
-    dateFrom: prevFrom.toISOString().split("T")[0]!,
-    dateTo:   prevTo.toISOString().split("T")[0]!,
+    dateFrom: toISTDateString(prevFrom),
+    dateTo:   toISTDateString(prevTo),
   });
   const prevSorted = [...prev].sort((a, b) => leaderboardScore(b) - leaderboardScore(a));
   const prevRankMap = new Map(prevSorted.map((s, i) => [s.employeeId, i + 1]));
@@ -360,8 +360,8 @@ export async function getLeaderboard(params: {
   return {
     rows,
     period: {
-      from: from.toISOString().split("T")[0]!,
-      to:   to.toISOString().split("T")[0]!,
+      from: toISTDateString(from),
+      to:   toISTDateString(to),
     },
   };
 }
@@ -488,8 +488,8 @@ export async function getEmployeeDetailReport(params: {
     hourlyCalls,
     recentCalls,
     period: {
-      from: from.toISOString().split("T")[0]!,
-      to:   to.toISOString().split("T")[0]!,
+      from: toISTDateString(from),
+      to:   toISTDateString(to),
     },
   };
 }
@@ -584,8 +584,8 @@ export async function getCallReport(params: {
       ),
     },
     period: {
-      from: from.toISOString().split("T")[0]!,
-      to:   to.toISOString().split("T")[0]!,
+      from: toISTDateString(from),
+      to:   toISTDateString(to),
     },
   };
 }
@@ -682,8 +682,8 @@ export async function getTaskReport(params: {
     rows: taskRows,
     totals: { total, pending, completed, overdue: overdueCount },
     period: {
-      from: from.toISOString().split("T")[0]!,
-      to:   to.toISOString().split("T")[0]!,
+      from: toISTDateString(from),
+      to:   toISTDateString(to),
     },
   };
 }
@@ -919,8 +919,8 @@ export async function getConversionReport(params: {
     dailyTrend,
     sourceBreakdown,
     period: {
-      from: from.toISOString().split("T")[0]!,
-      to:   to.toISOString().split("T")[0]!,
+      from: toISTDateString(from),
+      to:   toISTDateString(to),
     },
   };
 }

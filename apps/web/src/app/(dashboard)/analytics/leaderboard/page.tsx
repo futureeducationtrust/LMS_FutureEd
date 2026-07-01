@@ -53,6 +53,26 @@ export default function LeaderboardPage() {
     ),
   ).toString();
 
+  // /leads doesn't understand the "period" shorthand the report pages use, so drill-throughs
+  // into it need the resolved actual dates (already IST-calendar-aligned YYYY-MM-DD strings)
+  // — otherwise leads created outside the selected period (e.g. "today") would still show up,
+  // mismatching the card's period-scoped count.
+  const leadsDateParams = resolvedRange
+    ? { dateFrom: resolvedRange.from, dateTo: resolvedRange.to }
+    : {};
+  const assignedLeadsQuery = new URLSearchParams({
+    excludeUnassigned: "true",
+    // leaderboard's totalLeads counts every status created in the period, so bypass /leads'
+    // default hiding of CONFIRMED/INTERESTED — otherwise this card would always read higher
+    showAllStatuses: "true",
+    ...leadsDateParams,
+  }).toString();
+  const assignedConfirmedQuery = new URLSearchParams({
+    status: "CONFIRMED",
+    excludeUnassigned: "true",
+    ...leadsDateParams,
+  }).toString();
+
   return (
     <ReportShell
       title="Employee Leaderboard"
@@ -70,12 +90,12 @@ export default function LeaderboardPage() {
       {/* Summary cards — aggregate across all employees */}
       {!isLoading && !isError && rows.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <SummaryCard icon={Users}        label="Assigned Leads"     value={rows.reduce((s, r) => s + r.totalLeads, 0)}      color="text-gray-700" />
-          <SummaryCard icon={CheckCircle2} label="Assigned Confirmed" value={rows.reduce((s, r) => s + r.confirmedLeads, 0)}  color="text-green-600" />
-          <SummaryCard icon={Phone}        label="Total Calls"     value={rows.reduce((s, r) => s + r.totalCalls, 0)}      color="text-blue-600" />
-          <SummaryCard icon={CheckCircle2} label="Connected"       value={rows.reduce((s, r) => s + r.connectedCalls, 0)}  color="text-teal-600" />
-          <SummaryCard icon={Clock}        label="Call Minutes"    value={`${rows.reduce((s, r) => s + r.totalCallMinutes, 0)}m`} color="text-orange-500" />
-          <SummaryCard icon={DollarSign}   label="Revenue"         value={formatCurrency(rows.reduce((s, r) => s + r.totalRevenue, 0))} color="text-violet-600" />
+          <SummaryCard icon={Users}        label="Assigned Leads"     value={rows.reduce((s, r) => s + r.totalLeads, 0)}      color="text-gray-700"  href={`/leads?${assignedLeadsQuery}`} />
+          <SummaryCard icon={CheckCircle2} label="Assigned Confirmed" value={rows.reduce((s, r) => s + r.confirmedLeads, 0)}  color="text-green-600" href={`/leads?${assignedConfirmedQuery}`} />
+          <SummaryCard icon={Phone}        label="Total Calls"     value={rows.reduce((s, r) => s + r.totalCalls, 0)}      color="text-blue-600"  href={`/analytics/calls?${detailQuery}`} />
+          <SummaryCard icon={CheckCircle2} label="Connected"       value={rows.reduce((s, r) => s + r.connectedCalls, 0)}  color="text-teal-600"  href={`/analytics/calls?${detailQuery}`} />
+          <SummaryCard icon={Clock}        label="Call Minutes"    value={`${rows.reduce((s, r) => s + r.totalCallMinutes, 0)}m`} color="text-orange-500" href={`/analytics/calls?${detailQuery}`} />
+          <SummaryCard icon={DollarSign}   label="Revenue"         value={formatCurrency(rows.reduce((s, r) => s + r.totalRevenue, 0))} color="text-violet-600" href={`/analytics/conversions?${detailQuery}`} />
         </div>
       )}
 
@@ -228,15 +248,18 @@ export default function LeaderboardPage() {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: string | number; color: string }) {
+function SummaryCard({ icon: Icon, label, value, color, href }: { icon: React.ElementType; label: string; value: string | number; color: string; href: string }) {
   return (
-    <div className="bg-white border border-surface-200 rounded-xl px-4 py-3">
+    <Link
+      href={href}
+      className="bg-white border border-surface-200 rounded-xl px-4 py-3 hover:border-primary hover:shadow-sm transition-all"
+    >
       <div className="flex items-center gap-1.5 mb-1">
         <Icon size={12} className={color} />
         <p className="text-xs text-gray-400">{label}</p>
       </div>
       <p className={cn("text-lg font-bold", color)}>{value}</p>
-    </div>
+    </Link>
   );
 }
 

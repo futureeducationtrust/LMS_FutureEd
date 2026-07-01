@@ -36,7 +36,7 @@ const CONFIRMED_APP_ALLOWED_FIELDS = new Set([
   "localGuardianName", "localGuardianAddress", "localGuardianPhone",
   "bookingAmount", "bookingCashDDNo", "bookingBank", "bookingDate",
   "admissionAmount", "admissionCashDDNo", "admissionBank", "admissionDate",
-  "duesAmount", "dueDate",
+  "duesAmount", "dueDate", "fileNumber",
   "extraCurricular", "authorisedBy", "remarks",
 ]);
 
@@ -779,32 +779,50 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
           body["motherName"]),
       );
 
-      const updated = await fastify.prisma.$transaction(async (tx) => {
-        if (Object.keys(leadUpdateData).length > 0) {
-          await tx.lead.update({
-            where: { id: leadId },
-            data: leadUpdateData,
+      let updated;
+      try {
+        updated = await fastify.prisma.$transaction(async (tx) => {
+          if (Object.keys(leadUpdateData).length > 0) {
+            await tx.lead.update({
+              where: { id: leadId },
+              data: leadUpdateData,
+            });
+          }
+
+          return tx.confirmedApplication.upsert({
+            where: { leadId },
+            create: {
+              leadId,
+              ...(body as any),
+              isFormComplete,
+            },
+            update: {
+              ...(body as any),
+              isFormComplete,
+            },
+            include: {
+              academicRecords: true,
+              entranceExams: true,
+              documents: { include: { documentType: true } },
+            },
+          });
+        });
+      } catch (err) {
+        const prismaErr = err as { code?: string; meta?: { target?: string[] } };
+        if (
+          prismaErr.code === "P2002" &&
+          prismaErr.meta?.target?.includes("fileNumber")
+        ) {
+          return reply.status(409).send({
+            success: false,
+            error: {
+              code: "FILE_NUMBER_TAKEN",
+              message: "That file number is already used by another application. Please choose a different one.",
+            },
           });
         }
-
-        return tx.confirmedApplication.upsert({
-          where: { leadId },
-          create: {
-            leadId,
-            ...(body as any),
-            isFormComplete,
-          },
-          update: {
-            ...(body as any),
-            isFormComplete,
-          },
-          include: {
-            academicRecords: true,
-            entranceExams: true,
-            documents: { include: { documentType: true } },
-          },
-        });
-      });
+        throw err;
+      }
 
       return reply.status(200).send({ success: true, data: updated });
     },

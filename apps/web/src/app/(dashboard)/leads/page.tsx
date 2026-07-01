@@ -69,6 +69,8 @@ export default function LeadsPage() {
     if (showAllStatuses === "true") patch.showAllStatuses = true;
     const excludeTerminal = params.get("excludeTerminal");
     if (excludeTerminal === "true") patch.excludeTerminal = true;
+    const excludeUnassigned = params.get("excludeUnassigned");
+    if (excludeUnassigned === "true") patch.excludeUnassigned = true;
     const upcoming = params.get("upcoming");
     if (upcoming === "true") patch.upcoming = true;
     if (Object.keys(patch).length > 0) setFilters((prev) => ({ ...prev, ...patch }));

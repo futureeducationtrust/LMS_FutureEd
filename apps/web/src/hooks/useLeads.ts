@@ -44,6 +44,7 @@ export type LeadFilters = {
   overdue?: boolean;
   showAllStatuses?: boolean;   // bypass ALL status exclusion (Total Leads card)
   excludeTerminal?: boolean;   // exclude only CONFIRMED/DUPLICATE/LOST — matches dashboard active count
+  excludeUnassigned?: boolean; // only leads that have an assignee — leaderboard "Assigned" drill-throughs
   upcoming?: boolean;          // show leads with follow-up due in next 7 days
 };
 
@@ -259,7 +260,8 @@ export function useUpdateLead(leadId: string) {
     onSuccess: () => {
       toast.success("Lead updated successfully");
       void qc.invalidateQueries({ queryKey: ["leads"] });
-      void qc.invalidateQueries({ queryKey: ["leads", leadId] });
+      // Lead detail page fetches under the "lead" (singular) key — "leads" doesn't prefix-match it.
+      void qc.invalidateQueries({ queryKey: ["lead", leadId] });
     },
     onError: (error) => {
       toast.error("Failed to update lead");
