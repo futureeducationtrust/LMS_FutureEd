@@ -157,12 +157,11 @@ export function EmployeePerformanceTable() {
         </div>
       </div>
 
-      {/* Summary cards. Calls/Minutes are clickable (go to the Call Report).
-          Interacted is a sum of each employee's own-leads-interacted count —
-          there's no single Leads-list filter that reproduces "per-lead,
-          interacted by its own current assignee" across everyone at once,
-          so this one isn't a link (an approximate one would just reintroduce
-          a mismatch, same as the calls-report link did before). */}
+      {/* Summary cards — all three drill through to a list backed by the
+          exact same computation as the number shown, so the card and the
+          list it opens can never disagree. Leads Interacted goes to /leads
+          (via the interactedByOwner filter — see getInteractedLeadIds()),
+          same as the other lead-based drill-throughs in this app. */}
       {!isLoading && employees.length > 0 && (
         <div className="grid grid-cols-3 gap-3 mb-4">
           <Link
@@ -172,10 +171,13 @@ export function EmployeePerformanceTable() {
             <p className="text-xs text-blue-500 font-medium">Total Calls</p>
             <p className="text-lg font-bold text-blue-700">{totalCalls}</p>
           </Link>
-          <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2 text-center">
+          <Link
+            href={`/leads?interactedByOwner=true${leadsPeriodQs ? `&${leadsPeriodQs.slice(1)}` : ""}`}
+            className="bg-green-50 border border-green-100 rounded-lg px-3 py-2 text-center hover:border-green-300 hover:bg-green-100 transition-colors"
+          >
             <p className="text-xs text-green-500 font-medium">Leads Interacted</p>
             <p className="text-lg font-bold text-green-700">{totalInteracted}</p>
-          </div>
+          </Link>
           <Link
             href={`/analytics/calls${callsPeriodQs}`}
             className="bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 text-center hover:border-orange-300 hover:bg-orange-100 transition-colors"

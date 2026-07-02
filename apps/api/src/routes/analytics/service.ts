@@ -153,6 +153,35 @@ export async function getDashboardOverview(params: {
 // Confirmation rate + response time + follow-up compliance
 // ═══════════════════════════════════════
 
+// Pure — no I/O. A (employee, lead) pair counts as "interacted with" when
+// the lead is assigned to that employee, was created within the period, and
+// the employee logged at least one non-STATUS_CHANGED interaction on it
+// within the period. This is the ONLY place that rule is expressed — both
+// getEmployeePerformance()'s per-row/total "Leads Interacted" counts and
+// getInteractedLeadIds()'s /leads drill-through are built from it, so the
+// Admin Dashboard's total card and the list it opens can never disagree.
+function computeInteractedPairs(
+  employees: { id: string }[],
+  allLeads: { id: string; assignedToId: string | null }[],
+  allEmployeeInteractions: { userId: string; leadId: string }[],
+): { employeeId: string; leadId: string }[] {
+  const pairs: { employeeId: string; leadId: string }[] = [];
+  for (const employee of employees) {
+    const employeeLeadIds = new Set(
+      allLeads.filter((l) => l.assignedToId === employee.id).map((l) => l.id),
+    );
+    const interactedLeadIds = new Set(
+      allEmployeeInteractions
+        .filter((i) => i.userId === employee.id && employeeLeadIds.has(i.leadId))
+        .map((i) => i.leadId),
+    );
+    for (const leadId of interactedLeadIds) {
+      pairs.push({ employeeId: employee.id, leadId });
+    }
+  }
+  return pairs;
+}
+
 export async function getEmployeePerformance(params: {
   prisma: PrismaClient;
   period: Period;
@@ -245,6 +274,10 @@ export async function getEmployeePerformance(params: {
 
     ]);
 
+  // Single source of truth for "leads interacted with" — shared with
+  // getInteractedLeadIds() so the total card and its /leads drill-through match.
+  const interactedPairs = computeInteractedPairs(employees, allLeads, allEmployeeInteractions);
+
   // Process in JS — group by employee
   const metrics = employees.map((employee) => {
     const employeeLeads = allLeads.filter(
@@ -323,10 +356,10 @@ export async function getEmployeePerformance(params: {
     // own leads (assigned to them, created in this period) — not any lead
     // they ever touched — so this row's numbers and its drill-through
     // (assignedToId + interactedByUserId) describe the same set of leads.
-    const employeeLeadIds = new Set(employeeLeads.map((l) => l.id));
-    const leadsInteracted = new Set(
-      empInteractions.filter((i) => employeeLeadIds.has(i.leadId)).map((i) => i.leadId),
-    ).size;
+    // Derived from the shared interactedPairs — see computeInteractedPairs().
+    const leadsInteracted = interactedPairs.filter(
+      (p) => p.employeeId === employee.id,
+    ).length;
 
     // ── Daily activity chart — period-scoped (not fixed 7 days) ──
     const msPerDay = 24 * 60 * 60 * 1000;
@@ -384,10 +417,11 @@ export async function getEmployeePerformance(params: {
     totalMinutes: Math.round(
       allCalls.reduce((sum, i) => sum + (i.callDurationSecs ?? 0), 0) / 60,
     ),
-    // Sum of the (now per-employee-scoped) leadsInteracted values — safe to
-    // add directly since each lead belongs to at most one employee's own
-    // lead set, so there's no cross-employee double-counting to worry about.
-    totalInteracted: metrics.reduce((s, m) => s + m.metrics.leadsInteracted, 0),
+    // Length of the shared interactedPairs array — getInteractedLeadIds()
+    // derives the /leads drill-through's leadIds filter from the same
+    // computeInteractedPairs() call, so this total and that list can never
+    // disagree.
+    totalInteracted: interactedPairs.length,
   };
 
   return {
@@ -398,6 +432,54 @@ export async function getEmployeePerformance(params: {
       to: toISTDateString(to),
     },
   };
+}
+
+// ═══════════════════════════════════════
+// INTERACTED LEAD IDS
+// Powers the Employee Performance panel's "Leads Interacted" total card,
+// which links straight to GET /leads?interactedByOwner=true&dateFrom=..&dateTo=..
+// (via the leadIds filter in buildLeadWhereClause) instead of a separate
+// report page. Built from the same computeInteractedPairs() rule as
+// getEmployeePerformance()'s totals.totalInteracted, so the card and the
+// /leads list it opens always report the same count.
+// ═══════════════════════════════════════
+
+export async function getInteractedLeadIds(params: {
+  prisma: PrismaClient;
+  period: Period;
+  dateFrom?: string;
+  dateTo?: string;
+  branchId?: string;
+}): Promise<string[]> {
+  const { prisma, branchId } = params;
+  const { from, to } = getDateRange(params.period, params.dateFrom, params.dateTo);
+  const branchFilter = branchId ? { branchId } : {};
+
+  const employees = await prisma.user.findMany({
+    where: { ...branchFilter, role: { in: ["EMPLOYEE", "ADMIN", "SUB_ADMIN"] }, isActive: true },
+    select: { id: true },
+  });
+  const employeeIds = employees.map((e) => e.id);
+
+  const [allLeads, allEmployeeInteractions] = await Promise.all([
+    prisma.lead.findMany({
+      where: { ...branchFilter, assignedToId: { in: employeeIds }, createdAt: { gte: from, lte: to } },
+      select: { id: true, assignedToId: true },
+    }),
+    prisma.interactionLog.findMany({
+      where: {
+        userId: { in: employeeIds },
+        createdAt: { gte: from, lte: to },
+        isDeleted: false,
+        type: { not: "STATUS_CHANGED" },
+      },
+      select: { userId: true, leadId: true },
+    }),
+  ]);
+
+  // Every lead is assigned to exactly one employee, so employeeLeadIds sets
+  // are disjoint — pairs already contains no duplicate leadId.
+  return computeInteractedPairs(employees, allLeads, allEmployeeInteractions).map((p) => p.leadId);
 }
 
 // ═══════════════════════════════════════

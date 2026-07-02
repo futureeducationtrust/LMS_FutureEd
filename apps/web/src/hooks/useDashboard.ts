@@ -163,3 +163,47 @@ export function useMyCallStats() {
     staleTime: 30_000,
   });
 }
+
+// ── Employee Dashboard overview — period-filtered KPI cards ──
+export type MyEmployeeStats = {
+  totalLeads: number;
+  newLeads: number;
+  confirmedLeads: number;
+  lostLeads: number;
+  interestedLeads: number;
+  activeLeads: number;
+  totalCalls: number;
+  totalCallMinutes: number;
+  leadsInteracted: number;
+  overdueFollowUps: number;
+  confirmationRate: number;
+};
+
+export type MyDashboardOverview = {
+  stats: MyEmployeeStats | null;
+  totalLeadsAllTime: number;
+  activeLeadsAllTime: number;
+  period: { from: string; to: string };
+};
+
+export function useMyDashboardOverview(
+  period: Period,
+  dateFrom?: string,
+  dateTo?: string,
+) {
+  return useQuery({
+    queryKey: ["me", "dashboard-overview", period, dateFrom, dateTo],
+    queryFn: async () => {
+      const params = new URLSearchParams({ period });
+      if (period === "custom" && dateFrom) params.set("dateFrom", dateFrom);
+      if (period === "custom" && dateTo) params.set("dateTo", dateTo);
+      const { data } = await api.get<ApiResponse<MyDashboardOverview>>(
+        `/me/dashboard-overview?${params}`,
+      );
+      return data.data;
+    },
+    enabled: period !== "custom" || (!!dateFrom && !!dateTo),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}

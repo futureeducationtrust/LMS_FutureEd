@@ -11,6 +11,15 @@ import {
 import { validateBody } from "../../middleware/validate";
 import { dispatchInteractionNotification } from "../../services/notifications";
 import { invalidateActivityCache } from "../../services/cache";
+import {
+  getMyCallsList,
+  getMyInteractedLeadsCount,
+  getMyInteractedLeadsList,
+  computeEmployeeStats,
+} from "../analytics/reporting";
+import { getDateRange, toISTDateString } from "../analytics/helpers";
+import type { Period } from "../analytics/helpers";
+import { buildLeadWhereClause } from "../leads/service";
 
 const EDIT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -431,6 +440,10 @@ export async function interactionRoutes(
   // GET /me/call-stats
   // Returns today's call count, total call minutes, and daily breakdown
   // for the last 7 days — for the authenticated user (any role).
+  // Day boundaries are IST-aligned via getDateRange(), same as every other
+  // "today" computation in the app (getMyCallsList/getMyInteractedLeadsList),
+  // so this widget's numbers always match the /my-calls and /leads
+  // drill-throughs it links to.
   // ─────────────────────────────────────────
   fastify.get(
     "/me/call-stats",
@@ -438,18 +451,12 @@ export async function interactionRoutes(
     async (request, reply) => {
       const { id: userId } = request.user;
 
-      const now = new Date();
-      const todayStart = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
-      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+      const { from: todayStart, to: todayEnd } = getDateRange("today");
       const sevenDaysAgo = new Date(
         todayStart.getTime() - 6 * 24 * 60 * 60 * 1000,
       );
 
-      const [callInteractions, allTodayInteractions, confirmedToday, newLeadsToday] =
+      const [callInteractions, leadsInteractedToday, confirmedToday, newLeadsToday] =
         await Promise.all([
           // CALL interactions for the last 7 days (for the chart)
           fastify.prisma.interactionLog.findMany({
@@ -457,29 +464,23 @@ export async function interactionRoutes(
               userId,
               type: "CALL",
               isDeleted: false,
-              createdAt: { gte: sevenDaysAgo, lt: todayEnd },
+              createdAt: { gte: sevenDaysAgo, lte: todayEnd },
             },
             select: { callDurationSecs: true, createdAt: true },
             orderBy: { createdAt: "asc" },
           }),
 
-          // ALL interactions today (for leads-interacted count)
-          fastify.prisma.interactionLog.findMany({
-            where: {
-              userId,
-              isDeleted: false,
-              type: { not: "STATUS_CHANGED" },
-              createdAt: { gte: todayStart, lt: todayEnd },
-            },
-            select: { leadId: true },
-          }),
+          // Distinct leads interacted with today (any type except STATUS_CHANGED)
+          // — shares its WHERE clause with GET /me/interactions/leads so the
+          // "Interacted" tile always matches its drill-through list.
+          getMyInteractedLeadsCount({ prisma: fastify.prisma, userId, scope: "today" }),
 
           // Leads confirmed today by this user
           fastify.prisma.lead.count({
             where: {
               assignedToId: userId,
               status: "CONFIRMED",
-              confirmedAt: { gte: todayStart, lt: todayEnd },
+              confirmedAt: { gte: todayStart, lte: todayEnd },
             },
           }),
 
@@ -487,7 +488,7 @@ export async function interactionRoutes(
           fastify.prisma.lead.count({
             where: {
               assignedToId: userId,
-              createdAt: { gte: todayStart, lt: todayEnd },
+              createdAt: { gte: todayStart, lte: todayEnd },
             },
           }),
         ]);
@@ -499,16 +500,16 @@ export async function interactionRoutes(
       >();
       for (let d = 0; d < 7; d++) {
         const date = new Date(sevenDaysAgo.getTime() + d * 24 * 60 * 60 * 1000);
-        const key = date.toISOString().slice(0, 10);
+        const key = toISTDateString(date);
         dailyMap.set(key, { callCount: 0, totalMinutes: 0 });
       }
 
       let callsToday = 0;
       let secondsToday = 0;
-      const todayKey = todayStart.toISOString().slice(0, 10);
+      const todayKey = toISTDateString(todayStart);
 
       for (const row of callInteractions) {
-        const key = row.createdAt.toISOString().slice(0, 10);
+        const key = toISTDateString(row.createdAt);
         const bucket = dailyMap.get(key);
         if (bucket) {
           bucket.callCount++;
@@ -528,10 +529,6 @@ export async function interactionRoutes(
         }),
       );
 
-      const leadsInteractedToday = new Set(
-        allTodayInteractions.map((i) => i.leadId),
-      ).size;
-
       return reply.send({
         success: true,
         data: {
@@ -542,6 +539,156 @@ export async function interactionRoutes(
           newLeadsToday,
           daily,
         },
+      });
+    },
+  );
+
+  // ─────────────────────────────────────────
+  // GET /me/dashboard-overview
+  // Employee Dashboard KPI cards — Total Leads (all-time), New/Confirmed/
+  // Interested/Lost Leads (period), Overdue (current), Conversion Rate
+  // (period), Total Calls/Total Call Duration/Total Leads Interacted
+  // (period) — for the authenticated user only.
+  //
+  // Reuses computeEmployeeStats() — the SAME function the leaderboard and
+  // per-employee admin report are built from — so an employee's own
+  // dashboard numbers always match what an admin sees drilling into that
+  // employee, and every period-scoped card here reconciles exactly with its
+  // /leads or /my-calls drill-through (period cohort semantics: leads
+  // created in the window, currently in that status / touched by this user).
+  // ─────────────────────────────────────────
+  fastify.get(
+    "/me/dashboard-overview",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: userId, role } = request.user;
+      const q = request.query as {
+        period?: Period;
+        dateFrom?: string;
+        dateTo?: string;
+      };
+      const period = q.period ?? "last30";
+
+      // All-time portfolio counts — NOT period-scoped by design (they answer
+      // "how many leads do I currently own", not "how much activity happened
+      // in this window"). Built via buildLeadWhereClause so they match
+      // /leads?showAllStatuses=true exactly.
+      const totalAllTimeWhere = buildLeadWhereClause({
+        userId,
+        userRole: role as Role,
+        filters: { showAllStatuses: true },
+      });
+      const activeAllTimeWhere = buildLeadWhereClause({
+        userId,
+        userRole: role as Role,
+        filters: { excludeTerminal: true },
+      });
+
+      const [statsArr, totalLeadsAllTime, activeLeadsAllTime] = await Promise.all([
+        computeEmployeeStats({
+          prisma: fastify.prisma,
+          period,
+          ...(q.dateFrom ? { dateFrom: q.dateFrom } : {}),
+          ...(q.dateTo ? { dateTo: q.dateTo } : {}),
+          employeeId: userId,
+        }),
+        fastify.prisma.lead.count({ where: totalAllTimeWhere }),
+        fastify.prisma.lead.count({ where: activeAllTimeWhere }),
+      ]);
+
+      const { from, to } = getDateRange(period, q.dateFrom, q.dateTo);
+
+      return reply.status(200).send({
+        success: true,
+        data: {
+          stats: statsArr[0] ?? null,
+          totalLeadsAllTime,
+          activeLeadsAllTime,
+          period: { from: toISTDateString(from), to: toISTDateString(to) },
+        },
+      });
+    },
+  );
+
+  // ─────────────────────────────────────────
+  // GET /me/calls
+  // Paginated call records for the authenticated user — powers the
+  // "My Call Records" section and the Total Calls / Today's Calls /
+  // Total Call Duration card drill-throughs.
+  // ─────────────────────────────────────────
+  fastify.get(
+    "/me/calls",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: userId } = request.user;
+      const q = request.query as {
+        page?: string;
+        pageSize?: string;
+        search?: string;
+        dateFrom?: string;
+        dateTo?: string;
+        scope?: "all" | "today";
+        sortOrder?: "asc" | "desc";
+      };
+
+      const page = Math.max(1, parseInt(q.page ?? "1", 10) || 1);
+      const rawPageSize = parseInt(q.pageSize ?? "20", 10) || 20;
+      const pageSize = [20, 50, 80].includes(rawPageSize) ? rawPageSize : 20;
+
+      const data = await getMyCallsList({
+        prisma: fastify.prisma,
+        userId,
+        page,
+        pageSize,
+        ...(q.search ? { search: q.search } : {}),
+        ...(q.dateFrom ? { dateFrom: q.dateFrom } : {}),
+        ...(q.dateTo ? { dateTo: q.dateTo } : {}),
+        ...(q.scope === "today" ? { scope: "today" as const } : {}),
+        ...(q.sortOrder === "asc" ? { sortOrder: "asc" as const } : {}),
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: { ...data, totalPages: Math.ceil(data.total / data.pageSize) },
+      });
+    },
+  );
+
+  // ─────────────────────────────────────────
+  // GET /me/interactions/leads
+  // Paginated distinct leads the authenticated user has interacted with
+  // (any interaction type except STATUS_CHANGED) — powers the Today's
+  // Report "Interacted" tile drill-through. Defaults to today's scope,
+  // matching /me/call-stats' leadsInteractedToday.
+  // ─────────────────────────────────────────
+  fastify.get(
+    "/me/interactions/leads",
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const { id: userId } = request.user;
+      const q = request.query as {
+        page?: string;
+        pageSize?: string;
+        search?: string;
+        scope?: "all" | "today";
+      };
+
+      const page = Math.max(1, parseInt(q.page ?? "1", 10) || 1);
+      const rawPageSize = parseInt(q.pageSize ?? "20", 10) || 20;
+      const pageSize = [20, 50, 80].includes(rawPageSize) ? rawPageSize : 20;
+
+      const data = await getMyInteractedLeadsList({
+        prisma: fastify.prisma,
+        userId,
+        page,
+        pageSize,
+        scope: q.scope === "all" ? "all" : "today",
+        ...(q.search ? { search: q.search } : {}),
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: { ...data, totalPages: Math.ceil(data.total / data.pageSize) },
       });
     },
   );

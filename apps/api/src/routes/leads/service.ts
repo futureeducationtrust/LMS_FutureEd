@@ -107,6 +107,8 @@ export function buildLeadWhereClause(params: {
     // metric used by the leaderboard/employee-detail reports, whose drill-throughs
     // must filter the same way to reconcile with the number they display.
     dateBy?: 'createdAt' | 'confirmedAt'
+    leadIds?: string[]          // restrict to a precomputed set of lead IDs — used by
+                                 // the "interacted by owner" drill-through (see leads/list.ts)
   }
 }) {
   const { userId, userRole, filters } = params
@@ -159,6 +161,7 @@ export function buildLeadWhereClause(params: {
   }
   if (filters.sourceId)     andClauses.push({ sourceId: filters.sourceId })
   if (filters.branchId)     andClauses.push({ branchId: filters.branchId })
+  if (filters.leadIds)      andClauses.push({ id: { in: filters.leadIds } })
   if (filters.overdue) {
     andClauses.push({ nextFollowUpAt: { lte: new Date() } })
     andClauses.push({ status: { notIn: ['CONFIRMED', 'DUPLICATE', 'LOST'] } })

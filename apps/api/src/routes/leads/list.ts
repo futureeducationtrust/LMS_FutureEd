@@ -3,6 +3,7 @@ import { authenticate } from "../../middleware/authenticate";
 import { LeadListQuerySchema } from "@lms/types";
 import { validateQuery } from "../../middleware/validate";
 import { buildLeadWhereClause, leadSummarySelect } from "./service";
+import { getInteractedLeadIds } from "../analytics/service";
 import type { LeadStatus, Role } from "@lms/types";
 
 const ALLOWED_PAGE_SIZES = [20, 50, 80];
@@ -68,6 +69,22 @@ export async function leadListRoute(fastify: FastifyInstance): Promise<void> {
       if (rawQuery.excludeTerminal === "true") filters.excludeTerminal = true;
       if (rawQuery.excludeUnassigned === "true") filters.excludeUnassigned = true;
       if (rawQuery.dateBy === "confirmedAt") filters.dateBy = "confirmedAt";
+
+      // "Leads Interacted" total card drill-through (Employee Performance
+      // panel) — leads whose CURRENT owner logged an interaction on them in
+      // the period. Not expressible as a normal filter (it compares each
+      // lead's assignedToId against InteractionLog rows dynamically), so the
+      // matching IDs are precomputed with the exact same rule the card's
+      // total is built from (getInteractedLeadIds / computeInteractedPairs).
+      if (rawQuery.interactedByOwner === "true") {
+        filters.leadIds = await getInteractedLeadIds({
+          prisma: fastify.prisma,
+          period: query.dateFrom && query.dateTo ? "custom" : "last30",
+          ...(query.dateFrom ? { dateFrom: query.dateFrom } : {}),
+          ...(query.dateTo ? { dateTo: query.dateTo } : {}),
+          ...(role !== "EMPLOYEE" && effectiveBranchId ? { branchId: effectiveBranchId } : {}),
+        });
+      }
 
       const where = buildLeadWhereClause({
         userId,

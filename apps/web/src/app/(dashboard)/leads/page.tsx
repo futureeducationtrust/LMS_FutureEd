@@ -73,6 +73,8 @@ export default function LeadsPage() {
     if (excludeUnassigned === "true") patch.excludeUnassigned = true;
     const upcoming = params.get("upcoming");
     if (upcoming === "true") patch.upcoming = true;
+    const interactedByOwner = params.get("interactedByOwner");
+    if (interactedByOwner === "true") patch.interactedByOwner = true;
     if (Object.keys(patch).length > 0) setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");

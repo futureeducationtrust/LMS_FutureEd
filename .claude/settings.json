@@ -19,7 +19,9 @@
       "PowerShell(cd \"d:\\\\web_all\\\\LMS_FutureEd\\\\packages\\\\db\"; $env:DATABASE_URL=\"postgresql://postgres.maduztjwogyyyskqxfdu:PgB8HMcbyqn@aws-1-ap-south-1.pooler.supabase.com:5432/postgres\"; pnpm prisma migrate deploy)",
       "PowerShell(cd \"d:\\\\web_all\\\\LMS_FutureEd\\\\packages\\\\db\"; $env:DATABASE_URL=\"postgresql://postgres.maduztjwogyyyskqxfdu:PgB8HMcbyqn@aws-1-ap-south-1.pooler.supabase.com:5432/postgres\"; pnpm prisma generate)",
       "Bash(mkdir -p \"d:/web_all/LMS_FutureEd/apps/web/src/app/\\(dashboard\\)/leads/[id]/edit\")",
-      "Bash(node -e \"console.log\\(new Date\\(\\).toISOString\\(\\)\\)\")"
+      "Bash(node -e \"console.log\\(new Date\\(\\).toISOString\\(\\)\\)\")",
+      "Bash(npx eslint *)",
+      "Bash(git checkout *)"
     ],
     "additionalDirectories": [
       "d:\\web_all\\LMS_FutureEd\\apps\\web\\src\\app\\(dashboard)\\leads\\[id]"

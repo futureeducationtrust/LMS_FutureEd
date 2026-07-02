@@ -15,7 +15,7 @@
  *   getConversionReport()     → composes getConfirmedReport() data
  */
 
-import type { PrismaClient } from "@lms/db";
+import type { PrismaClient, Prisma } from "@lms/db";
 import { getDateRange, toISTDateString } from "./helpers";
 import type { Period } from "./helpers";
 
@@ -54,6 +54,7 @@ export type EmployeeStats = {
   newLeads: number;
   confirmedLeads: number;
   lostLeads: number;
+  interestedLeads: number;
   activeLeads: number; // not confirmed / not lost / not duplicate
 
   // Calls
@@ -206,6 +207,7 @@ export async function computeEmployeeStats(params: {
     const confirmedLeads  = empLeads.filter((l) => l.status === "CONFIRMED").length;
     const lostLeads       = empLeads.filter((l) => l.status === "LOST").length;
     const newLeads        = empLeads.filter((l) => l.status === "NEW").length;
+    const interestedLeads = empLeads.filter((l) => l.status === "INTERESTED").length;
     const activeLeads     = empLeads.filter(
       (l) => !["CONFIRMED", "LOST", "DUPLICATE"].includes(l.status),
     ).length;
@@ -287,6 +289,7 @@ export async function computeEmployeeStats(params: {
       newLeads,
       confirmedLeads,
       lostLeads,
+      interestedLeads,
       activeLeads,
       totalCalls,
       connectedCalls,
@@ -945,4 +948,244 @@ export async function getLeaderboardSummaryForEmail(params: {
     rows: sorted,
     date: new Date().toISOString().split("T")[0]!,
   };
+}
+
+// ══════════════════════════════════════════════════════════════
+// MY CALLS — "My Call Records" page (self-scoped)
+//
+// SINGLE-SOURCE-OF-TRUTH RULE (same as the header comment above):
+//   buildMyCallsWhere() is the ONLY place the "which calls belong to me"
+//   filter is expressed. getMyCallsList() (the /my-calls page) builds its
+//   WHERE clause through it. The Employee Dashboard's period-scoped call
+//   KPI cards (Total Calls / Total Call Duration / Total Leads Interacted)
+//   are computed separately via computeEmployeeStats() — see
+//   GET /me/dashboard-overview — not through this module.
+// ══════════════════════════════════════════════════════════════
+
+export type MyCallsFilters = {
+  userId: string;
+  search?: string;
+  dateFrom?: string; // YYYY-MM-DD, IST — ignored when scope === "today"
+  dateTo?: string;
+  scope?: "all" | "today"; // "today" pins the range to the current IST day
+};
+
+function buildMyCallsWhere(
+  filters: MyCallsFilters,
+): Prisma.InteractionLogWhereInput {
+  const { userId, search, dateFrom, dateTo, scope } = filters;
+
+  const where: Prisma.InteractionLogWhereInput = {
+    userId,
+    type: "CALL",
+    isDeleted: false,
+  };
+
+  if (scope === "today") {
+    const { from, to } = getDateRange("today");
+    where.createdAt = { gte: from, lte: to };
+  } else if (dateFrom || dateTo) {
+    const { from, to } = getDateRange("custom", dateFrom, dateTo);
+    where.createdAt = { gte: from, lte: to };
+  }
+
+  if (search && search.trim()) {
+    const term = search.trim();
+    where.lead = {
+      OR: [
+        { studentName: { contains: term, mode: "insensitive" } },
+        { phone: { contains: term } },
+      ],
+    };
+  }
+
+  return where;
+}
+
+export type MyCallRow = {
+  id: string;
+  leadId: string;
+  leadName: string;
+  leadPhone: string;
+  outcome: string | null;
+  direction: string | null;
+  durationSecs: number | null;
+  durationLabel: string;
+  recordingUrl: string | null;
+  createdAt: string;
+};
+
+function formatDuration(secs: number | null): string {
+  if (!secs) return "—";
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+/** Paginated call list — powers "Total Calls" / "Today's Calls" / "Total Call Duration" drill-throughs and the My Call Records section. */
+export async function getMyCallsList(
+  params: MyCallsFilters & {
+    prisma: PrismaClient;
+    page?: number;
+    pageSize?: number;
+    sortOrder?: "asc" | "desc";
+  },
+): Promise<{ rows: MyCallRow[]; total: number; page: number; pageSize: number }> {
+  const { prisma, page = 1, pageSize = 20, sortOrder = "desc" } = params;
+  const where = buildMyCallsWhere(params);
+
+  const [rows, total] = await Promise.all([
+    prisma.interactionLog.findMany({
+      where,
+      select: {
+        id: true,
+        callDurationSecs: true,
+        callOutcome: true,
+        callDirection: true,
+        callRecordingUrl: true,
+        createdAt: true,
+        lead: { select: { id: true, studentName: true, phone: true } },
+      },
+      orderBy: { createdAt: sortOrder },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.interactionLog.count({ where }),
+  ]);
+
+  const callRows: MyCallRow[] = rows.map((r) => ({
+    id: r.id,
+    leadId: r.lead.id,
+    leadName: r.lead.studentName,
+    leadPhone: r.lead.phone,
+    outcome: r.callOutcome,
+    direction: r.callDirection,
+    durationSecs: r.callDurationSecs,
+    durationLabel: formatDuration(r.callDurationSecs),
+    recordingUrl: r.callRecordingUrl,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
+  return { rows: callRows, total, page, pageSize };
+}
+
+// ══════════════════════════════════════════════════════════════
+// MY INTERACTED LEADS (any interaction type) — powers both the "Total
+// Leads Interacted" KPI card (scope: "all") and the Today's Report
+// "Interacted" tile (scope: "today").
+//
+// A lead counts as "interacted with" the moment the employee logs any
+// interaction on it (a note, a status-change follow-up, an SMS/email, or a
+// call) — NOT calls-only. This matches the same type != STATUS_CHANGED rule
+// used by /me/call-stats' leadsInteractedToday and the admin Employee
+// Performance panel's leadsInteracted. buildMyInteractionsWhere() is the
+// single source of truth every one of those counts and lists share, so they
+// can never disagree.
+// ══════════════════════════════════════════════════════════════
+
+export type MyInteractionsFilters = {
+  userId: string;
+  search?: string;
+  scope?: "all" | "today";
+};
+
+export function buildMyInteractionsWhere(
+  filters: MyInteractionsFilters,
+): Prisma.InteractionLogWhereInput {
+  const { userId, search, scope } = filters;
+
+  const where: Prisma.InteractionLogWhereInput = {
+    userId,
+    isDeleted: false,
+    type: { not: "STATUS_CHANGED" },
+  };
+
+  if (scope === "today") {
+    const { from, to } = getDateRange("today");
+    where.createdAt = { gte: from, lte: to };
+  }
+
+  if (search && search.trim()) {
+    const term = search.trim();
+    where.lead = {
+      OR: [
+        { studentName: { contains: term, mode: "insensitive" } },
+        { phone: { contains: term } },
+      ],
+    };
+  }
+
+  return where;
+}
+
+/** Distinct-lead count for a given scope — what /me/call-stats' leadsInteractedToday reports. */
+export async function getMyInteractedLeadsCount(params: {
+  prisma: PrismaClient;
+  userId: string;
+  scope?: "all" | "today";
+}): Promise<number> {
+  const { prisma, userId, scope } = params;
+  const where = buildMyInteractionsWhere({ userId, ...(scope ? { scope } : {}) });
+  const groups = await prisma.interactionLog.groupBy({ by: ["leadId"], where });
+  return groups.length;
+}
+
+export type MyInteractedLeadListRow = {
+  leadId: string;
+  leadName: string;
+  leadPhone: string;
+  status: string;
+  interactionCount: number;
+  lastInteractionAt: string;
+};
+
+export async function getMyInteractedLeadsList(params: {
+  prisma: PrismaClient;
+  userId: string;
+  search?: string;
+  scope?: "all" | "today";
+  page?: number;
+  pageSize?: number;
+}): Promise<{ rows: MyInteractedLeadListRow[]; total: number; page: number; pageSize: number }> {
+  const { prisma, userId, search, scope, page = 1, pageSize = 20 } = params;
+  const where = buildMyInteractionsWhere({
+    userId,
+    ...(search ? { search } : {}),
+    ...(scope ? { scope } : {}),
+  });
+
+  const groups = await prisma.interactionLog.groupBy({
+    by: ["leadId"],
+    where,
+    _count: { _all: true },
+    _max: { createdAt: true },
+  });
+
+  groups.sort(
+    (a, b) => (b._max.createdAt?.getTime() ?? 0) - (a._max.createdAt?.getTime() ?? 0),
+  );
+
+  const total = groups.length;
+  const pageGroups = groups.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+  const leadIds = pageGroups.map((g) => g.leadId);
+
+  const leads = await prisma.lead.findMany({
+    where: { id: { in: leadIds } },
+    select: { id: true, studentName: true, phone: true, status: true },
+  });
+  const leadMap = new Map(leads.map((l) => [l.id, l]));
+
+  const rows: MyInteractedLeadListRow[] = pageGroups.map((g) => {
+    const lead = leadMap.get(g.leadId);
+    return {
+      leadId: g.leadId,
+      leadName: lead?.studentName ?? "Unknown",
+      leadPhone: lead?.phone ?? "—",
+      status: lead?.status ?? "UNKNOWN",
+      interactionCount: g._count._all,
+      lastInteractionAt: (g._max.createdAt ?? new Date(0)).toISOString(),
+    };
+  });
+
+  return { rows, total, page, pageSize };
 }

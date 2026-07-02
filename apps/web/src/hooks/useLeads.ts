@@ -46,6 +46,7 @@ export type LeadFilters = {
   excludeTerminal?: boolean;   // exclude only CONFIRMED/DUPLICATE/LOST — matches dashboard active count
   excludeUnassigned?: boolean; // only leads that have an assignee — leaderboard "Assigned" drill-throughs
   upcoming?: boolean;          // show leads with follow-up due in next 7 days
+  interactedByOwner?: boolean; // leads whose current assignee logged an interaction on them — Employee Performance "Leads Interacted" drill-through
 };
 
 // ── Lead list with auto-refresh ──

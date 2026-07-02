@@ -129,7 +129,7 @@ export function FollowUpsDueToday() {
           <p className="text-xs text-gray-400 mt-1">No follow-ups due</p>
         </div>
       ) : (
-        <div className="space-y-4 max-h-80 overflow-y-auto">
+        <div className="space-y-4 max-h-96 overflow-y-auto">
           {/* Overdue */}
           {overdueLeads.length > 0 && (
             <div>
