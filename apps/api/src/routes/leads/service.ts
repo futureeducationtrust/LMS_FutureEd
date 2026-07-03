@@ -163,7 +163,18 @@ export function buildLeadWhereClause(params: {
   if (filters.branchId)     andClauses.push({ branchId: filters.branchId })
   if (filters.leadIds)      andClauses.push({ id: { in: filters.leadIds } })
   if (filters.overdue) {
-    andClauses.push({ nextFollowUpAt: { lte: new Date() } })
+    // "Overdue" means due in the past — a custom date range here narrows
+    // *which* overdue follow-ups to show (by due date), it never reveals
+    // future-dated ones. So the upper bound is min(dateTo, now).
+    const overdueUpperBound = filters.dateTo
+      ? new Date(Math.min(toDateRangeEnd(filters.dateTo).getTime(), Date.now()))
+      : new Date()
+    andClauses.push({
+      nextFollowUpAt: {
+        ...(filters.dateFrom ? { gte: toDateRangeStart(filters.dateFrom) } : {}),
+        lte: overdueUpperBound,
+      },
+    })
     andClauses.push({ status: { notIn: ['CONFIRMED', 'DUPLICATE', 'LOST'] } })
   }
   if (filters.upcoming) {
@@ -221,7 +232,7 @@ export function buildLeadWhereClause(params: {
     })
   }
 
-  if (filters.dateFrom ?? filters.dateTo) {
+  if ((filters.dateFrom ?? filters.dateTo) && !filters.overdue) {
     // Defaults to createdAt (cohort semantics — "leads created in this
     // window", matching computeEmployeeStats' confirmedLeads/leadsInteracted
     // used by the leaderboard/employee-detail reports). Only the Admissions
@@ -231,6 +242,9 @@ export function buildLeadWhereClause(params: {
     // own interaction-level date filter above — both the lead's creation and
     // the interaction itself must fall in the window, matching leadsInteracted's
     // "leads created in this period, currently assigned to them, that they interacted with".
+    // When overdue is set, the range is already applied to nextFollowUpAt above —
+    // applying it to createdAt too would exclude overdue leads whose creation date
+    // falls outside the (unrelated) due-date range.
     const dateField = filters.dateBy === 'confirmedAt' ? 'confirmedAt' : 'createdAt'
     andClauses.push({
       [dateField]: {
