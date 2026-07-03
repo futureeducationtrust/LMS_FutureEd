@@ -168,12 +168,13 @@ export async function computeEmployeeStats(params: {
       },
     }),
 
-    // Overdue follow-ups (no period filter — current state)
+    // Overdue follow-ups — due date falls within the resolved period window,
+    // capped at now (a follow-up due in the future isn't "overdue" yet).
     prisma.lead.findMany({
       where: {
         ...branchFilter,
         assignedToId: { in: ids },
-        nextFollowUpAt: { lte: now },
+        nextFollowUpAt: { gte: from, lte: to < now ? to : now },
         status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
       },
       select: { assignedToId: true },
@@ -259,8 +260,9 @@ export async function computeEmployeeStats(params: {
     }, 0);
 
     const overdueFollowUps = empOverdue.length;
-    // Clamp to [0, 100] — overdueFollowUps is ALL-TIME while totalLeads is period-scoped,
-    // so the raw formula can go negative when an employee has more historical overdue than new leads.
+    // Clamp to [0, 100] — overdueFollowUps counts leads by follow-up due date
+    // while totalLeads counts leads by creation date, so the raw formula can
+    // still go negative for an employee with many older leads overdue in this window.
     const followUpComplianceRate = totalLeads > 0
       ? Math.max(0, Math.min(100, Math.round(((totalLeads - overdueFollowUps) / totalLeads) * 100 * 10) / 10))
       : 100;

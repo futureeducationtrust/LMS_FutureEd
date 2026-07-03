@@ -71,11 +71,12 @@ export async function getDashboardOverview(params: {
       },
     }),
 
-    // Overdue follow-ups right now
+    // Overdue follow-ups — due date falls within the resolved period window,
+    // capped at now (a follow-up due in the future isn't "overdue" yet).
     prisma.lead.count({
       where: {
         ...branchFilter,
-        nextFollowUpAt: { lte: new Date() },
+        nextFollowUpAt: { gte: from, lte: to < new Date() ? to : new Date() },
         status: { notIn: ["CONFIRMED", "DUPLICATE", "LOST"] },
       },
     }),

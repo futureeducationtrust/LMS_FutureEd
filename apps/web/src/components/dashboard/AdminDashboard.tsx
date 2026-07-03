@@ -113,11 +113,11 @@ export function AdminDashboard() {
         <StatCard
           title="Pending Follow-ups"
           value={summary?.overdueCount ?? 0}
-          subtitle="need action"
+          subtitle="need action · in period"
           icon={<AlertTriangle size={16} className="text-amber-600" />}
           colorVariant="yellow"
           loading={isLoading}
-          href="/leads?overdue=true"
+          href={`/leads?overdue=true${periodQs}`}
         />
         <StatCard
           title="Interested Leads"

@@ -129,8 +129,8 @@ export function EmployeeDashboard() {
         </div>
       </div>
 
-      {/* KPI cards — Total Leads/Overdue are always-current; everything else
-          respects the period selector above. */}
+      {/* KPI cards — Total Leads is always-current (all-time); everything else,
+          including Overdue Follow-ups, respects the period selector above. */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Total Leads"
@@ -180,11 +180,11 @@ export function EmployeeDashboard() {
         <StatCard
           title="Overdue Follow-ups"
           value={overdueCount}
-          subtitle={overdueCount === 0 ? "All caught up · now" : "Need action · now"}
+          subtitle={overdueCount === 0 ? "All caught up · in period" : "Need action · in period"}
           icon={<Clock size={16} className="text-amber-600" />}
           colorVariant="yellow"
           loading={overviewLoading}
-          href="/leads?overdue=true"
+          href={`/leads?overdue=true${periodQs}`}
         />
         <StatCard
           title="Conversion Rate"
