@@ -1,9 +1,19 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { PAYMENT_DUE_BLOCK, PAYMENT_DUE_MESSAGE } from "@/lib/paymentGate";
 
 const API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const IS_PROD = process.env.NODE_ENV === "production";
 
 export async function POST(req: NextRequest) {
+  // Access is suspended until pending dues are cleared — reject every sign-in
+  // so the login screen gate cannot be bypassed by calling this route directly.
+  if (PAYMENT_DUE_BLOCK) {
+    return NextResponse.json(
+      { success: false, message: PAYMENT_DUE_MESSAGE },
+      { status: 403 },
+    );
+  }
+
   const body = await req.text();
 
   const upstream = await fetch(`${API}/api/v1/auth/login`, {

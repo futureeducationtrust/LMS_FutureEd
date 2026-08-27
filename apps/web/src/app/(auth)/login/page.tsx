@@ -3,13 +3,20 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, AlertTriangle, Lock } from "lucide-react";
+import { Eye, EyeOff, AlertTriangle, Lock, CreditCard } from "lucide-react";
 import { isAxiosError } from "axios";
 import toast from "react-hot-toast";
 import { useLogin } from "@/hooks/useAuthMutations";
 import { useAuthStore } from "@/store/auth";
 import { LoginSchema } from "@lms/types";
 import { cn } from "@/lib/utils";
+import { Modal } from "@/components/ui/Modal";
+import {
+  PAYMENT_DUE_BLOCK,
+  PAYMENT_DUE_TITLE,
+  PAYMENT_DUE_MESSAGE,
+  PAYMENT_DUE_NOTE,
+} from "@/lib/paymentGate";
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_KEY = "lms_login_attempts";
@@ -51,6 +58,7 @@ export default function LoginPage() {
   // Populate from localStorage after mount.
   const [attempts, setAttempts] = useState<number>(0);
   const [isLockedOut, setIsLockedOut] = useState<boolean>(false);
+  const [showDueModal, setShowDueModal] = useState<boolean>(false);
 
   useEffect(() => {
     try {
@@ -102,6 +110,13 @@ export default function LoginPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Access is suspended until pending dues are cleared — no role can sign in.
+    if (PAYMENT_DUE_BLOCK) {
+      setShowDueModal(true);
+      return;
+    }
+
     if (isLockedOut) return;
     if (!validateForm()) return;
 
@@ -136,7 +151,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* ── Left: Brand Panel ── */}
+      {/* ââ Left: Brand Panel ââ */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary flex-col items-center justify-center p-12 relative overflow-hidden">
         {/* Background pattern */}
         <div className="absolute inset-0 opacity-10">
@@ -182,7 +197,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ── Right: Login Form ── */}
+      {/* ââ Right: Login Form ââ */}
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-white">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
@@ -322,10 +337,39 @@ export default function LoginPage() {
           </form>
 
           <p className="text-center text-xs text-gray-400 mt-8">
-            Future Education Trust · Bokaro Steel City
+            Future Education Trust Â· Bokaro Steel City
           </p>
         </div>
       </div>
+
+      {/* ── Pending dues notice (blocks sign-in for every role) ── */}
+      <Modal
+        open={showDueModal}
+        onClose={() => setShowDueModal(false)}
+        title={PAYMENT_DUE_TITLE}
+        size="md"
+        footer={
+          <button
+            type="button"
+            onClick={() => setShowDueModal(false)}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-primary hover:bg-primary-800 active:bg-primary-900"
+          >
+            Okay
+          </button>
+        }
+      >
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 rounded-full bg-red-50 p-2">
+            <CreditCard size={18} className="text-red-500" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {PAYMENT_DUE_MESSAGE}
+            </p>
+            <p className="text-xs text-gray-500 mt-2">{PAYMENT_DUE_NOTE}</p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
