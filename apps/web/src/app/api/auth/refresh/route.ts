@@ -1,9 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { PAYMENT_DUE_BLOCK, PAYMENT_DUE_MESSAGE } from "@/lib/paymentGate";
 
 const API = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 const IS_PROD = process.env.NODE_ENV === "production";
 
 export async function POST(req: NextRequest) {
+  // While access is suspended, no session may be renewed. Every open tab hits
+  // this on load (bootstrap) or on its next 401, so this is what signs everyone
+  // out and sends them back to the login screen.
+  if (PAYMENT_DUE_BLOCK) {
+    const blocked = NextResponse.json(
+      { success: false, message: PAYMENT_DUE_MESSAGE },
+      { status: 401 },
+    );
+    blocked.cookies.delete("refreshToken");
+    return blocked;
+  }
+
   const refreshToken = req.cookies.get("refreshToken")?.value;
 
   if (!refreshToken) {
