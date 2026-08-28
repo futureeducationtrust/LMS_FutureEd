@@ -4,6 +4,7 @@
  *   pnpm tsx scripts/force-logout-all.ts              # dry run — reports, changes nothing
  *   pnpm tsx scripts/force-logout-all.ts --confirm    # revoke access tokens (reversible)
  *   pnpm tsx scripts/force-logout-all.ts --confirm --purge-refresh-tokens
+ *   pnpm tsx scripts/force-logout-all.ts --restore   # lift the block, let users back in
  *
  * Two independent layers, matching how the API validates a session:
  *
@@ -16,10 +17,9 @@
  *      deletes them. This is PERMANENT: the raw tokens are only stored hashed,
  *      so nothing can restore a deleted session.
  *
- * Note that refreshAccessToken() clears `user-logout:<userId>` on a successful
- * refresh. Layer 1 alone therefore holds only while refresh is unavailable — the
- * web proxy blocks it via PAYMENT_DUE_BLOCK, but the API is still directly
- * reachable. Use --purge-refresh-tokens when the sign-out must be absolute.
+ * Note that both loginUser() and refreshAccessToken() clear `user-logout:<userId>`
+ * on success, so layer 1 self-heals: a user signing in again lifts their own
+ * block. Use --purge-refresh-tokens when the sign-out must be absolute.
  */
 import dotenv from "dotenv";
 import fs from "node:fs";
@@ -37,6 +37,7 @@ for (const envPath of [
 }
 
 const CONFIRM = process.argv.includes("--confirm");
+const RESTORE = process.argv.includes("--restore");
 const PURGE_REFRESH = process.argv.includes("--purge-refresh-tokens");
 // Long enough to outlive any unexpired 15-minute access token many times over.
 const LOGOUT_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -69,6 +70,17 @@ async function main(): Promise<void> {
   await redis.connect();
 
   try {
+    if (RESTORE) {
+      const keys = await redis.keys("user-logout:*");
+      const removed = keys.length > 0 ? await redis.del(...keys) : 0;
+      console.log(
+        `
+  ✓ Lifted the block on ${removed} user${removed === 1 ? "" : "s"} — login works normally again.
+`,
+      );
+      return;
+    }
+
     const users = await prisma.user.findMany({
       select: { id: true, email: true, role: true, isActive: true },
     });
