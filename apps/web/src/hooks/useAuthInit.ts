@@ -15,11 +15,14 @@ export function useAuthInit(): { isLoading: boolean } {
         // Use the same-origin proxy so the httpOnly refresh cookie is sent.
         const response = await fetch("/api/auth/refresh", { method: "POST" });
         if (!response.ok) throw new Error("refresh_failed");
-        const { data } = await response.json() as { data: { accessToken: string } };
+        const { data } = (await response.json()) as {
+          data: { accessToken: string };
+        };
         tokenStore.set(data.accessToken);
         const meResponse = await api.get("/auth/me");
         setAuth(meResponse.data.data, data.accessToken);
-        document.cookie = "auth_session=1; path=/; max-age=604800; SameSite=Lax";
+        document.cookie =
+          "auth_session=1; path=/; max-age=604800; SameSite=Lax";
       } catch {
         clearAuth();
       }
