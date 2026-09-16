@@ -16,13 +16,13 @@ import { leadFollowUpsRoute } from "./followups";
 import { bulkLeadRoutes } from "./bulk";
 import { publicDirectAdmissionRoute } from "./publicDirectAdmission";
 import { generateAdmissionPDF } from "../../services/admissionPDF";
+import { deleteFile, getStorageKeyFromUrl, uploadFile } from "../../storage";
 import {
   invalidateAnalyticsCache,
   invalidateActivityCache,
 } from "../../services/cache";
 import { QUEUES } from "../../plugins/bullmq";
 import { findDuplicateLeads } from "./service";
-import { deleteFile, getStorageKeyFromUrl } from "../../storage";
 
 // Fields the client is allowed to write on ConfirmedApplication.
 // Never include auto-generated IDs, timestamps, or audit tracking fields.
@@ -912,7 +912,16 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
 
       let emailSent = false;
       if (lead.email) {
+        let pdfKey: string | null = null;
         try {
+          const storedPdf = await uploadFile({
+            buffer: pdfBuffer,
+            fileName: `${id}-${Date.now()}.pdf`,
+            mimeType: "application/pdf",
+            folder: "admission-email",
+          });
+          pdfKey = storedPdf.key;
+
           await fastify.queues[QUEUES.NOTIFICATIONS].add(
             "admission-form-email",
             {
@@ -920,7 +929,7 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
               studentName: lead.studentName,
               branchName: lead.branch.name,
               courseName: lead.courses[0]?.course.name ?? "",
-              pdfBuffer: pdfBuffer.toString("base64"),
+              pdfKey,
             },
             {
               jobId: `admission-pdf-${id}`, // deduplicate: double-click / network retry
@@ -930,6 +939,7 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
           );
           emailSent = true;
         } catch {
+          if (pdfKey) await deleteFile(pdfKey).catch(() => undefined);
           emailSent = false;
         }
       }

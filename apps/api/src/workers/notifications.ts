@@ -17,6 +17,7 @@ import {
   sendLeaderboardSummaryEmail,
 } from "../services/email";
 import { config } from "../config";
+import { deleteFile, downloadFile } from "../storage";
 
 export function startNotificationWorker(connection: Redis): Worker {
   const worker = new Worker(
@@ -93,7 +94,10 @@ export function startNotificationWorker(connection: Redis): Worker {
             studentName: data.studentName,
             courseName: data.courseName,
             branchName: data.branchName,
-            pdfBuffer: Buffer.from(data.pdfBuffer as string, "base64"),
+            pdfBuffer: await downloadFile(data.pdfKey as string),
+          });
+          await deleteFile(data.pdfKey as string).catch((error) => {
+            console.warn(`[EMAIL WORKER] Could not remove PDF ${data.pdfKey}:`, error);
           });
           break;
 

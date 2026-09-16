@@ -93,6 +93,19 @@ export async function getSignedFileUrl(
   return getSignedUrl(client as any, command, { expiresIn: expiresInSeconds });
 }
 
+export async function downloadFile(key: string): Promise<Buffer> {
+  const client = getR2Client();
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: config.r2BucketName,
+      Key: key,
+    }),
+  );
+
+  if (!response.Body) throw new Error(`Stored file is empty: ${key}`);
+  return Buffer.from(await response.Body.transformToByteArray());
+}
+
 export async function deleteFile(key: string): Promise<void> {
   const client = getR2Client();
   await client.send(
