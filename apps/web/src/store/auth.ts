@@ -47,9 +47,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   bootstrap: async () => {
     if (get().isBootstrapped || get().isBootstrapping) return;
     set({ isLoading: true, isBootstrapping: true });
+    let refreshStatus: number | undefined;
     try {
       // Call the same-origin Next.js proxy so iOS Safari's ITP never blocks the cookie
       const refreshRes = await fetch("/api/auth/refresh", { method: "POST" });
+      refreshStatus = refreshRes.status;
       if (!refreshRes.ok) throw new Error("refresh_failed");
       const refreshData = await refreshRes.json() as { data: { accessToken: string } };
       tokenStore.set(refreshData.data.accessToken);
@@ -64,8 +66,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
       });
     } catch {
-      get().clearAuth();
-      set({ isBootstrapped: true, isBootstrapping: false });
+      // Only an explicit authentication failure means the session is gone.
+      // A 429 must not sign a user out.
+      if (refreshStatus === 401) {
+        get().clearAuth();
+        set({ isBootstrapped: true, isBootstrapping: false });
+        return;
+      }
+
+      // Retain the session and retry transient failures (including 429)
+      // without redirecting the user to the login page.
+      set({ isLoading: true, isBootstrapping: false });
+      window.setTimeout(() => void get().bootstrap(), 5_000);
     }
   },
 }));

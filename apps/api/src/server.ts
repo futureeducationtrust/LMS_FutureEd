@@ -14,6 +14,9 @@ import { registerRoutes } from "./routes";
 
 export async function buildServer() {
   const fastify = Fastify({
+    // The API is deployed behind Railway/Vercel. Without this, all requests
+    // forwarded by the web app share the proxy IP's rate-limit bucket.
+    trustProxy: true,
     logger: {
       level: config.isDev ? "debug" : "info",
       ...(config.isDev && {
@@ -61,7 +64,9 @@ export async function buildServer() {
 
   // Rate limit — global default
   await fastify.register(rateLimit, {
-    max: 100,
+    // Sensitive endpoints have their own tighter limits. This is a safety net
+    // sized for normal dashboard polling across many legitimate users.
+    max: config.isDev ? 2_000 : 1_200,
     timeWindow: "1 minute",
   });
 

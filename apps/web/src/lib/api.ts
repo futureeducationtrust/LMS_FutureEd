@@ -64,9 +64,16 @@ api.interceptors.response.use(
         original.headers = original.headers ?? {};
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
-      } catch {
-        tokenStore.clear();
-        if (typeof window !== "undefined") window.location.href = "/login";
+      } catch (refreshError) {
+        // Do not discard a valid session because refresh was rate-limited or
+        // the API was temporarily unavailable.
+        const refreshStatus = axios.isAxiosError(refreshError)
+          ? refreshError.response?.status
+          : undefined;
+        if (refreshStatus === 401) {
+          tokenStore.clear();
+          if (typeof window !== "undefined") window.location.href = "/login";
+        }
         return Promise.reject(error);
       } finally {
         isRefreshing = false;

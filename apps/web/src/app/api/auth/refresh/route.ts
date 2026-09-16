@@ -5,6 +5,7 @@ const IS_PROD = process.env.NODE_ENV === "production";
 
 export async function POST(req: NextRequest) {
   const refreshToken = req.cookies.get("refreshToken")?.value;
+  const forwardedFor = req.headers.get("x-forwarded-for");
 
   if (!refreshToken) {
     return NextResponse.json(
@@ -15,10 +16,11 @@ export async function POST(req: NextRequest) {
 
   const upstream = await fetch(`${API}/api/v1/auth/refresh`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: `refreshToken=${refreshToken}`,
-    },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: `refreshToken=${refreshToken}`,
+        ...(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+      },
     body: JSON.stringify({}),
   });
 
@@ -37,7 +39,8 @@ export async function POST(req: NextRequest) {
         maxAge: 7 * 24 * 60 * 60,
       });
     }
-  } else {
+  } else if (upstream.status === 401) {
+    // A 429 or temporary upstream failure is not an expired session.
     res.cookies.delete("refreshToken");
   }
 

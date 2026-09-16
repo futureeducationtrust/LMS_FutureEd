@@ -5,10 +5,15 @@ const IS_PROD = process.env.NODE_ENV === "production";
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
+  const forwardedFor = req.headers.get("x-forwarded-for");
 
   const upstream = await fetch(`${API}/api/v1/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      // Prevent all proxied visitors sharing one login rate-limit bucket.
+      ...(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
+    },
     body,
   });
 
