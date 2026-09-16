@@ -19,11 +19,15 @@ declare module 'fastify' {
 
 export const bullmqPlugin = fp(async (fastify) => {
   const connection = fastify.redis as Redis
+  const defaultJobOptions = {
+    removeOnComplete: { age: 24 * 60 * 60, count: 1000 },
+    removeOnFail: { age: 7 * 24 * 60 * 60, count: 1000 },
+  }
 
   const queues: Record<QueueName, Queue> = {
-    [QUEUES.NOTIFICATIONS]: new Queue(QUEUES.NOTIFICATIONS, { connection }),
-    [QUEUES.PDF]:           new Queue(QUEUES.PDF, { connection }),
-    [QUEUES.IMPORT]:        new Queue(QUEUES.IMPORT, { connection }),
+    [QUEUES.NOTIFICATIONS]: new Queue(QUEUES.NOTIFICATIONS, { connection, defaultJobOptions }),
+    [QUEUES.PDF]:           new Queue(QUEUES.PDF, { connection, defaultJobOptions }),
+    [QUEUES.IMPORT]:        new Queue(QUEUES.IMPORT, { connection, defaultJobOptions }),
   }
 
   fastify.decorate('queues', queues)
