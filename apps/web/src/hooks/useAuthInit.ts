@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import type { Role } from "@lms/types";
 import { useAuthStore } from "@/store/auth";
-import api from "@/lib/api";
+import api, { tokenStore } from "@/lib/api";
 
 // Called once on app mount
 // Attempts to restore session using httpOnly cookie
@@ -13,34 +12,13 @@ export function useAuthInit(): { isLoading: boolean } {
   useEffect(() => {
     async function restoreSession() {
       try {
-        // Try to get a new access token using the refresh cookie
-        const { data } = await api.post<{
-          data: {
-            accessToken: string;
-            user: {
-              id: string;
-              name: string;
-              email: string;
-              role: Role;
-              branchId: string;
-              branch?: { name: string; city?: string };
-            };
-          };
-        }>("/auth/refresh");
-
-        const { accessToken, user } = data.data;
-
-        setAuth(
-          {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            branchId: user.branchId,
-            ...(user.branch ? { branch: user.branch } : {}),
-          },
-          accessToken,
-        );
+        // Use the same-origin proxy so the httpOnly refresh cookie is sent.
+        const response = await fetch("/api/auth/refresh", { method: "POST" });
+        if (!response.ok) throw new Error("refresh_failed");
+        const { data } = await response.json() as { data: { accessToken: string } };
+        tokenStore.set(data.accessToken);
+        const meResponse = await api.get("/auth/me");
+        setAuth(meResponse.data.data, data.accessToken);
         document.cookie = "auth_session=1; path=/; max-age=604800; SameSite=Lax";
       } catch {
         clearAuth();
