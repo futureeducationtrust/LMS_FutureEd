@@ -24,7 +24,9 @@ export function startNotificationWorker(connection: Redis): Worker {
     "notifications",
     async (job) => {
       const { name, data } = job;
-      console.log(`[EMAIL WORKER] Processing job: ${name} → to: ${data.to ?? "(no to)"}`);
+      console.log(
+        `[EMAIL WORKER] Processing job: ${name} → to: ${data.to ?? "(no to)"}`,
+      );
 
       switch (name) {
         case "welcome-email":
@@ -97,7 +99,10 @@ export function startNotificationWorker(connection: Redis): Worker {
             pdfBuffer: await downloadFile(data.pdfKey as string),
           });
           await deleteFile(data.pdfKey as string).catch((error) => {
-            console.warn(`[EMAIL WORKER] Could not remove PDF ${data.pdfKey}:`, error);
+            console.warn(
+              `[EMAIL WORKER] Could not remove PDF ${data.pdfKey}:`,
+              error,
+            );
           });
           break;
 
@@ -135,32 +140,32 @@ export function startNotificationWorker(connection: Redis): Worker {
 
         case "daily-employee-report":
           await sendDailyEmployeeReport({
-            to:              data.email,
-            name:            data.name,
-            date:            data.date,
-            callCount:       data.callCount,
-            callMinutes:     data.callMinutes,
+            to: data.email,
+            name: data.name,
+            date: data.date,
+            callCount: data.callCount,
+            callMinutes: data.callMinutes,
             leadsInteracted: data.leadsInteracted,
-            confirmedToday:  data.confirmedToday,
-            newLeadsToday:   data.newLeadsToday,
+            confirmedToday: data.confirmedToday,
+            newLeadsToday: data.newLeadsToday,
             overdueFollowUps: data.overdueFollowUps,
           });
           break;
 
         case "admin-daily-report":
           await sendAdminDailyReport({
-            to:        data.to,
+            to: data.to,
             adminName: data.adminName,
-            date:      data.date,
+            date: data.date,
             employees: data.employees,
           });
           break;
 
         case "admin-leaderboard-summary":
           await sendLeaderboardSummaryEmail({
-            to:          data.to,
-            adminName:   data.adminName,
-            date:        data.date,
+            to: data.to,
+            adminName: data.adminName,
+            date: data.date,
             leaderboard: data.leaderboard,
           });
           break;
@@ -178,7 +183,10 @@ export function startNotificationWorker(connection: Redis): Worker {
   );
 
   worker.on("failed", (job, err) => {
-    console.error(`[EMAIL WORKER] Job FAILED [${job?.name}] to=${job?.data?.to}:`, err.message);
+    console.error(
+      `[EMAIL WORKER] Job FAILED [${job?.name}] to=${job?.data?.to}:`,
+      err.message,
+    );
   });
 
   worker.on("error", (err) => {
