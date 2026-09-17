@@ -26,6 +26,7 @@ export const leadSummarySelect = {
   createdAt: true,
   updatedAt: true,
   source: { select: { id: true, name: true } },
+  campaign: { select: { id: true, name: true } },
   assignedTo: { select: { id: true, name: true, email: true, role: true } },
   createdBy: { select: { id: true, name: true } },
   fatherName: true,
@@ -90,8 +91,11 @@ export function buildLeadWhereClause(params: {
     interactionType?: string    // leads with at least one interaction of this type (any user)
     interactedByUserId?: string // leads where this specific user logged any non-status interaction
     assignedToId?: string
+    assignedToIds?: string[]    // multi-select; may include 'unassigned'
+    searchField?: 'all' | 'name' | 'phone' | 'altPhone' | 'email' // narrows `search`
     courseId?: string
     sourceId?: string
+    campaignId?: string         // a campaign id, or 'none' for leads outside any campaign
     branchId?: string
     search?: string
     dateFrom?: string
@@ -146,7 +150,7 @@ export function buildLeadWhereClause(params: {
     // Full-text search — no status restriction
   } else if (filters.overdue || filters.upcoming) {
     // overdue/upcoming have their own status constraints added below; don't also add default
-  } else if (filters.assignedToId) {
+  } else if (filters.assignedToId || (filters.assignedToIds && filters.assignedToIds.length > 0)) {
     // Unassigned (?assignedToId=unassigned) or specific employee — match dashboard exclusion set
     andClauses.push({ status: { notIn: ['CONFIRMED', 'DUPLICATE', 'LOST'] } })
   } else if (filters.excludeTerminal) {
@@ -158,7 +162,16 @@ export function buildLeadWhereClause(params: {
   }
 
   // ── Other filters ──
-  if (filters.assignedToId === 'unassigned') {
+  if (filters.assignedToIds && filters.assignedToIds.length > 0) {
+    // Multi-select assignee: any of the chosen users, optionally plus unassigned
+    const ids = filters.assignedToIds.filter((id) => id !== 'unassigned')
+    const wantUnassigned = filters.assignedToIds.includes('unassigned')
+    const or: Record<string, unknown>[] = []
+    if (ids.length > 0) or.push({ assignedToId: { in: ids } })
+    if (wantUnassigned) or.push({ assignedToId: null })
+    if (or.length === 1) andClauses.push(or[0]!)
+    else if (or.length > 1) andClauses.push({ OR: or })
+  } else if (filters.assignedToId === 'unassigned') {
     andClauses.push({ assignedToId: null })
   } else if (filters.assignedToId) {
     andClauses.push({ assignedToId: filters.assignedToId })
@@ -166,6 +179,11 @@ export function buildLeadWhereClause(params: {
     andClauses.push({ assignedToId: { not: null } })
   }
   if (filters.sourceId)     andClauses.push({ sourceId: filters.sourceId })
+  if (filters.campaignId === 'none') {
+    andClauses.push({ campaignId: null })
+  } else if (filters.campaignId) {
+    andClauses.push({ campaignId: filters.campaignId })
+  }
   if (filters.branchId)     andClauses.push({ branchId: filters.branchId })
   if (filters.leadIds)      andClauses.push({ id: { in: filters.leadIds } })
   if (filters.overdue) {
@@ -237,19 +255,30 @@ export function buildLeadWhereClause(params: {
       },
     })
   }
-  // ── Full-DB search (name, phone, email, father name, location) ──
+  // ── Search — either one field (searchField) or the broad default set ──
   if (filters.search) {
+    const digits = filters.search.replace(/\D/g, '')
+    const phoneNeedle = digits.length >= 3 ? digits : filters.search
+    const byField: Record<string, Record<string, unknown>[]> = {
+      name:     [{ studentName:    { contains: filters.search, mode: 'insensitive' } }],
+      phone:    [{ phone:          { contains: phoneNeedle } }],
+      altPhone: [{ alternatePhone: { contains: phoneNeedle } }, { whatsappNumber: { contains: phoneNeedle } }],
+      email:    [{ email:          { contains: filters.search, mode: 'insensitive' } }],
+    }
+    const field = filters.searchField && filters.searchField !== 'all' ? filters.searchField : null
     andClauses.push({
-      OR: [
-        { studentName:  { contains: filters.search, mode: 'insensitive' } },
-        { phone:        { contains: filters.search } },
-        { email:        { contains: filters.search, mode: 'insensitive' } },
-        { fatherName:   { contains: filters.search, mode: 'insensitive' } },
-        { city:         { contains: filters.search, mode: 'insensitive' } },
-        { district:     { contains: filters.search, mode: 'insensitive' } },
-        { village:      { contains: filters.search, mode: 'insensitive' } },
-        { sector:       { contains: filters.search, mode: 'insensitive' } },
-      ],
+      OR: field
+        ? byField[field]!
+        : [
+            { studentName:  { contains: filters.search, mode: 'insensitive' } },
+            { phone:        { contains: phoneNeedle } },
+            { email:        { contains: filters.search, mode: 'insensitive' } },
+            { fatherName:   { contains: filters.search, mode: 'insensitive' } },
+            { city:         { contains: filters.search, mode: 'insensitive' } },
+            { district:     { contains: filters.search, mode: 'insensitive' } },
+            { village:      { contains: filters.search, mode: 'insensitive' } },
+            { sector:       { contains: filters.search, mode: 'insensitive' } },
+          ],
     })
   }
 

@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import type { Role } from "@lms/types";

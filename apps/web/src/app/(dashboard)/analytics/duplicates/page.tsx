@@ -8,7 +8,7 @@ import { useDuplicateReport } from "@/hooks/useReports";
 import { useStaffList } from "@/hooks/useLeads";
 import { cn } from "@/lib/utils";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 const STATUS_COLORS: Record<string, string> = {
   NEW:                "bg-blue-50 text-blue-700",

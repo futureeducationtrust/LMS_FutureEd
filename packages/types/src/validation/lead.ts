@@ -144,8 +144,11 @@ export const LeadListQuerySchema = z.object({
   interactionType: z.string().optional(), // e.g. "CALL" — leads with at least one interaction of this type
   interactedByUserId: z.string().cuid().optional(), // leads where this specific user logged any (non-status) interaction
   assignedToId: z.union([z.literal("unassigned"), z.string().cuid()]).optional(),
+  assignedToIds: z.string().optional(), // comma-separated user ids, may include "unassigned" — multi-select
+  searchField: z.enum(["all", "name", "phone", "altPhone", "email"]).default("all"), // narrows `search`
   courseId: z.string().cuid().optional(),
   sourceId: z.string().cuid().optional(),
+  campaignId: z.union([z.literal("none"), z.string().cuid()]).optional(), // "none" = leads not in any campaign
   branchId: z.string().cuid().optional(),
   search: z.string().trim().max(100).optional(),
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD format").optional(),

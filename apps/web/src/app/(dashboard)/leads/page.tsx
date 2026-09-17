@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import dayjs from "dayjs";
 import {
   LayoutList,
   LayoutGrid,
@@ -15,9 +14,11 @@ import {
 import { useLeadList, useAssignableUsers } from "@/hooks/useLeads";
 import { useQueryClient } from "@tanstack/react-query";
 import { LeadFilters } from "@/components/leads/LeadFilters";
+import { LeadTable } from "@/components/leads/LeadTable";
+import { ColumnChooser } from "@/components/leads/ColumnChooser";
+import { useLeadColumns } from "@/hooks/useLeadColumns";
 import { LeadCards } from "@/components/leads/LeadCards";
 import { EmptyLeads } from "@/components/leads/EmptyLeads";
-import { StatusBadge } from "@/components/leads/StatusBadge";
 import { Pagination } from "@/components/ui/Pagination";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -27,7 +28,7 @@ import { Role, LeadStatus } from "@lms/types";
 import { STATUS_CONFIG } from "@/config/leadStatus";
 import api from "@/lib/api";
 import { extractApiError } from "@/lib/utils";
-import type { LeadFilters as Filters, LeadSummary } from "@/hooks/useLeads";
+import type { LeadFilters as Filters } from "@/hooks/useLeads";
 import { cn } from "@/lib/utils";
 
 const ROLE_TAGS: Record<string, string> = {
@@ -56,6 +57,12 @@ export default function LeadsPage() {
     const patch: Partial<Filters> = {};
     const assignedToId = params.get("assignedToId");
     if (assignedToId) patch.assignedToId = assignedToId;
+    const assignedToIds = params.get("assignedToIds");
+    if (assignedToIds) patch.assignedToIds = assignedToIds;
+    const searchField = params.get("searchField") as Filters["searchField"] | null;
+    if (searchField) patch.searchField = searchField;
+    const search = params.get("search");
+    if (search) patch.search = search;
     const status = params.get("status") as LeadStatus | null;
     if (status) patch.status = status;
     const statuses = params.get("statuses");
@@ -80,9 +87,38 @@ export default function LeadsPage() {
     if (upcoming === "true") patch.upcoming = true;
     const interactedByOwner = params.get("interactedByOwner");
     if (interactedByOwner === "true") patch.interactedByOwner = true;
+    const campaignId = params.get("campaignId");
+    if (campaignId) { patch.campaignId = campaignId; patch.showAllStatuses = true; }
+    const sourceId = params.get("sourceId");
+    if (sourceId) patch.sourceId = sourceId;
+    const sortBy = params.get("sortBy");
+    if (sortBy) patch.sortBy = sortBy;
+    const sortOrder = params.get("sortOrder");
+    if (sortOrder === "asc" || sortOrder === "desc") patch.sortOrder = sortOrder;
+    const page = Number(params.get("page"));
+    if (page > 1) patch.page = page;
+    const pageSize = Number(params.get("pageSize"));
+    if ([20, 50, 80].includes(pageSize)) patch.pageSize = pageSize;
     if (Object.keys(patch).length > 0) setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
+
+  // Mirror the active filters back into the URL (no navigation) so a reload
+  // or a shared link lands on the same view — the way TeleCRM behaves.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters)) {
+      if (v === undefined || v === "" || v === false) continue;
+      if (DEFAULT_FILTERS[k as keyof Filters] === v) continue;
+      params.set(k, String(v));
+    }
+    const qs = params.toString();
+    const next = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    if (next !== window.location.pathname + window.location.search) {
+      window.history.replaceState(window.history.state, "", next);
+    }
+  }, [filters]);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const leadColumns = useLeadColumns(isManager);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAssignModal, setBulkAssignModal] = useState(false);
   const [bulkStatusModal, setBulkStatusModal] = useState(false);
@@ -186,6 +222,9 @@ export default function LeadsPage() {
           >
             <RefreshCw size={15} className={cn(isFetching && "animate-spin")} />
           </button>
+          <div className="hidden md:block">
+            <ColumnChooser keys={leadColumns.keys} available={leadColumns.available} onChange={leadColumns.update} onReset={leadColumns.reset} />
+          </div>
           <div className="hidden md:flex items-center border border-surface-200 rounded-lg overflow-hidden">
             <button
               onClick={() => setViewMode("table")}
@@ -310,12 +349,19 @@ export default function LeadsPage() {
           {/* Desktop — table with checkboxes or cards */}
           <div className="hidden md:block">
             {viewMode === "table" ? (
-              <LeadTableWithBulk
+              <LeadTable
                 leads={data.leads}
-                selected={selected}
-                onToggle={toggleSelect}
-                onToggleAll={toggleSelectAll}
-                isManager={isManager}
+                filters={filters}
+                columns={leadColumns.columns}
+                onSortChange={(field) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    sortBy: field,
+                    sortOrder: prev.sortBy === field && prev.sortOrder === "desc" ? "asc" : "desc",
+                    page: 1,
+                  }))
+                }
+                {...(isManager ? { selection: { selected, onToggle: toggleSelect, onToggleAll: toggleSelectAll } } : {})}
               />
             ) : (
               <LeadCards leads={data.leads} />
@@ -457,147 +503,3 @@ export default function LeadsPage() {
 }
 
 // Lead table with bulk select checkboxes
-function LeadTableWithBulk({
-  leads,
-  selected,
-  onToggle,
-  onToggleAll,
-  isManager,
-}: {
-  leads: LeadSummary[];
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-  onToggleAll: () => void;
-  isManager: boolean;
-}) {
-  // Import these from the existing LeadTable — we extend it with checkboxes
-  const allSelected = leads.length > 0 && selected.size === leads.length;
-
-  return (
-    <div className="bg-white border border-surface-200 rounded-xl overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-surface-200 bg-surface-50">
-              {isManager && (
-                <th className="px-4 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={onToggleAll}
-                    className="accent-primary w-4 h-4 cursor-pointer"
-                    aria-label="Select all leads on this page"
-                    title="Select all leads on this page"
-                  />
-                </th>
-              )}
-              {/* Re-use existing column headers from LeadTable */}
-              {[
-                "Student",
-                "Status",
-                "Course",
-                ...(isManager ? ["Counsellor"] : []),
-                "Follow-up",
-                "Added",
-                "Actions",
-              ].map((col) => (
-                <th
-                  key={col}
-                  className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide"
-                >
-                  {col}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-surface-100">
-            {leads.map((lead) => {
-              const isOverdue =
-                lead.nextFollowUpAt &&
-                new Date(lead.nextFollowUpAt) < new Date();
-              const primaryCourse = lead.courses.find(
-                (course) => course.isPrimary,
-              );
-
-              return (
-                <tr
-                  key={lead.id}
-                  className={cn(
-                    "hover:bg-surface-50",
-                    selected.has(lead.id) && "bg-primary-50",
-                  )}
-                >
-                  {isManager && (
-                    <td className="px-4 py-3 w-10">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(lead.id)}
-                        onChange={() => onToggle(lead.id)}
-                        className="accent-primary w-4 h-4 cursor-pointer"
-                        aria-label={`Select lead ${lead.studentName}`}
-                        title={`Select lead ${lead.studentName}`}
-                      />
-                    </td>
-                  )}
-                  <td className="px-4 py-3">
-                    <a href={`/leads/${lead.id}`}>
-                      <p className="text-sm font-semibold text-gray-900 hover:text-primary">
-                        {lead.studentName}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {lead.phone}
-                      </p>
-                    </a>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={lead.status} />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">
-                    {primaryCourse?.course.name ?? "—"}
-                  </td>
-                  {isManager && (
-                    <td className="px-4 py-3 text-xs text-gray-600">
-                      {lead.assignedTo?.name ?? (
-                        <span className="text-amber-600 font-medium">
-                          Unassigned
-                        </span>
-                      )}
-                    </td>
-                  )}
-                  <td className="px-4 py-3">
-                    {lead.nextFollowUpAt ? (
-                      <span
-                        className={cn(
-                          "text-xs font-medium",
-                          isOverdue ? "text-red-600" : "text-gray-600",
-                        )}
-                      >
-                        {isOverdue && "⚠ "}
-                        {dayjs(lead.nextFollowUpAt).fromNow()}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
-                    {dayjs(lead.createdAt).fromNow()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <a
-                      href={`tel:${lead.phone}`}
-                      className="p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary-50 transition-colors inline-block"
-                      aria-label={`Call ${lead.studentName}`}
-                      title={`Call ${lead.studentName}`}
-                    >
-                      📞
-                    </a>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}

@@ -141,6 +141,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       success: true,
       data: {
         accessToken: result.accessToken,
+        user: result.user, // lets the client skip GET /auth/me on bootstrap
       },
     });
   });

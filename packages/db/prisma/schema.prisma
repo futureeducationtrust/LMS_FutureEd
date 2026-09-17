@@ -91,9 +91,10 @@ model Branch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
-  leads Lead[]
-  tasks Task[]
+  users     User[]
+  leads     Lead[]
+  tasks     Task[]
+  campaigns Campaign[]
 }
 
 // ─────────────────────────────────────────
@@ -134,6 +135,10 @@ model User {
   auditLogs        AuditLog[]
   tasksAssigned    Task[]              @relation("TaskAssignedTo")
   tasksCreated     Task[]              @relation("TaskCreatedBy")
+  campaignsCreated Campaign[]          @relation("CampaignCreatedBy")
+  campaignAssignments CampaignAssignee[] @relation("CampaignAssigneeUser")
+  campaignAssignmentsMade CampaignAssignee[] @relation("CampaignAssignedBy")
+  campaignProgress CampaignProgress[]
 
   @@index([email])
   @@index([branchId])
@@ -261,6 +266,13 @@ model Lead {
   confirmedApplication ConfirmedApplication?
   tasks                Task[]
 
+  // ── Campaign (categorisation only) ──
+  // A campaign is a view over leads, not a separate store: the lead stays in
+  // the main list and every total. Set on Excel import; SetNull if the
+  // campaign is deleted so leads are never lost with it.
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
   // ── WhatsApp Cloud API fields ──
   waContactId    String?  // WhatsApp wa_id — used for idempotency check
   waFirstMessage String?  // First message body or "[image]", "[audio]" etc.
@@ -283,6 +295,8 @@ model Lead {
   @@index([nextFollowUpAt])  // follow-up dashboard
   @@index([waContactId])     // WhatsApp idempotency lookup
   @@index([isFromWhatsApp])  // filter WhatsApp vs other leads
+  @@index([campaignId])                // campaign filter + stats
+  @@index([campaignId, assignedToId])  // campaign work view (my leads in this campaign)
 }
 
 // ─────────────────────────────────────────
@@ -642,6 +656,82 @@ model Task {
   @@index([status])
   @@index([dueAt])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────
+// CAMPAIGN
+// A named batch of leads — one per Excel import, named after the file.
+// Categorisation layer only: Lead.campaignId points here, leads stay in
+// the main list. Assigning a campaign reassigns ALL its leads across the
+// campaign's assignees (round-robin) through the normal per-lead
+// assignment path, so AssignmentHistory stays the single record.
+// Name is unique per branch; a re-upload of the same file name gets
+// "name (2)", "name (3)" … (versioning, not appending).
+// ─────────────────────────────────────────
+
+model Campaign {
+  id         String  @id @default(cuid())
+  name       String
+  sourceFile String? // original file name as uploaded
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("CampaignCreatedBy", fields: [createdById], references: [id])
+
+  isArchived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leads     Lead[]
+  assignees CampaignAssignee[]
+  progress  CampaignProgress[]
+
+  @@unique([branchId, name])
+  @@index([branchId, isArchived])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────
+// CAMPAIGN ASSIGNEE
+// Campaign ↔ employee(s). Membership here decides who sees the campaign
+// in their list; the leads themselves carry assignedToId as usual.
+// ─────────────────────────────────────────
+
+model CampaignAssignee {
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation("CampaignAssigneeUser", fields: [userId], references: [id])
+
+  assignedById String
+  assignedBy   User   @relation("CampaignAssignedBy", fields: [assignedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@id([campaignId, userId])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────
+// CAMPAIGN PROGRESS
+// Resume-where-left-off, per (employee, campaign) — never global.
+// lastLeadId = the lead the employee last opened in this campaign's
+// work view. Switching campaigns and coming back resumes from here.
+// ─────────────────────────────────────────
+
+model CampaignProgress {
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+
+  lastLeadId String?
+  updatedAt  DateTime @updatedAt
+
+  @@id([campaignId, userId])
 }
 
 // ─────────────────────────────────────────

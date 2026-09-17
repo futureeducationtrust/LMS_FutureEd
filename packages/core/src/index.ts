@@ -47,3 +47,13 @@ export {
 // Import
 export { processImportRows } from "./import/processor";
 export type { ExcelRow } from "./import/processor";
+
+// Campaign
+export {
+  deriveCampaignName,
+  nextVersionedName,
+  distributeLeadsRoundRobin,
+  resolveResumeIndex,
+  neighbourIds,
+} from "./campaign";
+export type { ResumeResult } from "./campaign";

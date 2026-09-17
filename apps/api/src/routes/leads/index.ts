@@ -615,7 +615,12 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       preHandler: [authenticate, authorize([Role.ADMIN, Role.SUB_ADMIN])],
     },
     async (request, reply) => {
-      const { rows } = request.body as {
+      // fileName → campaign name (policy b: a colliding name is versioned,
+      // "name (2)", never appended to). campaignName lets the UI override
+      // the derived name; both optional so older clients keep working.
+      const { rows, fileName, campaignName } = request.body as {
+        fileName?: string;
+        campaignName?: string;
         rows: Array<{
           rowIndex: number;
           studentName: string;
@@ -752,11 +757,29 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
         },
       });
 
-      const { processImportRows } = await import("@lms/core");
+      const { processImportRows, deriveCampaignName, nextVersionedName } =
+        await import("@lms/core");
       const result = processImportRows(
         normalizedRows as any,
         existingLeads as any,
       );
+
+      // One campaign per import, named after the file. Created up front so
+      // every lead below carries campaignId; if zero leads end up created
+      // the empty campaign is removed again at the end.
+      let campaign: { id: string; name: string } | null = null;
+      const requestedName = (campaignName?.trim() || (fileName ? deriveCampaignName(fileName) : "")).trim();
+      if (requestedName) {
+        const existing = await fastify.prisma.campaign.findMany({
+          where: { branchId },
+          select: { name: true },
+        });
+        const name = nextVersionedName(requestedName, existing.map((c) => c.name));
+        campaign = await fastify.prisma.campaign.create({
+          data: { name, sourceFile: fileName ?? null, branchId, createdById: userId },
+          select: { id: true, name: true },
+        });
+      }
 
       // Create clean leads
       const created = [];
@@ -812,6 +835,7 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
                 ? Number(row.pcmPcbPercentage)
                 : null,
               sourceId,
+              campaignId: campaign?.id ?? null,
               purpose: row.purpose ?? null,
               remarks: row.remarks ?? null,
               branchId,
@@ -840,12 +864,19 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
 
+      // Nothing imported → don't leave an empty campaign behind.
+      if (campaign && created.length === 0) {
+        await fastify.prisma.campaign.delete({ where: { id: campaign.id } }).catch(() => {});
+        campaign = null;
+      }
+
       return reply.status(200).send({
         success: true,
         data: {
           imported: created,
           duplicateQueue: result.duplicateQueue,
           errors: [...result.errors, ...importErrors],
+          campaign,
         },
       });
     },

@@ -57,7 +57,9 @@ export async function buildServer() {
 
   await fastify.register(multipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB global limit
+      // Ceiling only — each upload route passes its own tighter limit to
+      // request.file() (recordings 50 MB, documents 10 MB).
+      fileSize: 50 * 1024 * 1024,
       files: 1, // one file per request
     },
   });

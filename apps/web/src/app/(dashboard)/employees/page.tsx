@@ -29,7 +29,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Role } from "@lms/types";
-import { getInitials, formatDate } from "@/lib/utils";
+import { getInitials, formatDate, extractApiError } from "@/lib/utils";
 import api from "@/lib/api";
 import { useNotifications } from "@/store/notifications";
 import { useQueryClient } from "@tanstack/react-query";
@@ -159,13 +159,17 @@ export default function EmployeesPage() {
   async function handleBulkActivate() {
     setBulkLoading(true);
     let ok = 0;
+    const failed: string[] = [];
     for (const id of selected) {
       try {
         await api.post(`/users/${id}/activate`);
         ok++;
-      } catch {}
+      } catch (e) {
+        failed.push(extractApiError(e));
+      }
     }
-    success(`${ok} employee${ok !== 1 ? "s" : ""} activated`);
+    if (ok > 0) success(`${ok} employee${ok !== 1 ? "s" : ""} activated`);
+    if (failed.length > 0) notifyError(`${failed.length} could not be activated`, failed[0]);
     setSelected(new Set());
     setBulkAction(null);
     void qc.invalidateQueries({ queryKey: ["users"] });
@@ -175,13 +179,17 @@ export default function EmployeesPage() {
   async function handleBulkDeactivate() {
     setBulkLoading(true);
     let ok = 0;
+    const failed: string[] = [];
     for (const id of selected) {
       try {
         await api.post(`/users/${id}/deactivate`);
         ok++;
-      } catch {}
+      } catch (e) {
+        failed.push(extractApiError(e));
+      }
     }
-    success(`${ok} employee${ok !== 1 ? "s" : ""} deactivated`);
+    if (ok > 0) success(`${ok} employee${ok !== 1 ? "s" : ""} deactivated`);
+    if (failed.length > 0) notifyError(`${failed.length} could not be deactivated`, failed[0]);
     setSelected(new Set());
     setBulkAction(null);
     void qc.invalidateQueries({ queryKey: ["users"] });
@@ -192,13 +200,17 @@ export default function EmployeesPage() {
     if (!bulkBranchId) return;
     setBulkLoading(true);
     let ok = 0;
+    const failed: string[] = [];
     for (const id of selected) {
       try {
         await api.patch(`/users/${id}`, { branchId: bulkBranchId });
         ok++;
-      } catch {}
+      } catch (e) {
+        failed.push(extractApiError(e));
+      }
     }
-    success(`${ok} employee${ok !== 1 ? "s" : ""} moved to new branch`);
+    if (ok > 0) success(`${ok} employee${ok !== 1 ? "s" : ""} moved to new branch`);
+    if (failed.length > 0) notifyError(`${failed.length} could not be moved`, failed[0]);
     setSelected(new Set());
     setBulkAction(null);
     setBulkBranchId("");
@@ -220,8 +232,8 @@ export default function EmployeesPage() {
       // Invalidate ALL cached queries — a name change appears in lead lists,
       // interaction timelines, assignment dropdowns, dashboards, etc.
       void qc.invalidateQueries();
-    } catch {
-      notifyError("Failed to update employee", "Please try again");
+    } catch (e) {
+      notifyError("Failed to update employee", extractApiError(e));
     } finally {
       setEditLoading(false);
     }

@@ -5,7 +5,7 @@ import { Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { PeriodSelector } from "@/components/dashboard/PeriodSelector";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import type { Period } from "@/hooks/useDashboard";
 
 export type ReportShellProps = {

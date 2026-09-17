@@ -15,6 +15,9 @@ export type {
   EntranceExamDetail,
   DocumentType,
   LeadDocument,
+  Campaign,
+  CampaignAssignee,
+  CampaignProgress,
 } from "./generated/client";
 
 export {

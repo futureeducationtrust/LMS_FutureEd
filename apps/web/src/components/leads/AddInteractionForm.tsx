@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Upload, X, Phone, MessageSquare, Mail, Users, Timer, Square } from "lucide-react";
 import { InteractionType } from "@lms/types";
-import { useAddInteraction, useUploadFile, useLeadInteractions } from "@/hooks/useLeadDetail";
+import { useAddInteraction, useUploadFile, useLeadInteractions, UPLOAD_LIMITS_MB } from "@/hooks/useLeadDetail";
 import { cn } from "@/lib/utils";
+import toast from "@/lib/toast";
 import dayjs from "dayjs";
 
 const TYPES = [
@@ -179,7 +180,23 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // Reset so picking the same file again re-fires onChange after a failure.
+    e.target.value = "";
     if (!file) return;
+
+    // Fail fast on the two things the server would reject anyway.
+    const maxBytes = UPLOAD_LIMITS_MB.recording * 1024 * 1024;
+    if (file.size === 0) {
+      toast.error({ title: "Empty file", message: `"${file.name}" has no content.` });
+      return;
+    }
+    if (file.size > maxBytes) {
+      toast.error({
+        title: "Recording too large",
+        message: `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is ${UPLOAD_LIMITS_MB.recording} MB.`,
+      });
+      return;
+    }
 
     setRecording(file);
     setIsUploading(true);
@@ -190,8 +207,11 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
         type: "recording",
       });
       setRecordingUrl(result.url);
+      toast.success({ title: "Recording uploaded", message: file.name });
     } catch {
+      // useUploadFile's onError already showed the reason; just clear the slot.
       setRecording(null);
+      setRecordingUrl(null);
     } finally {
       setIsUploading(false);
     }
@@ -199,16 +219,26 @@ export function AddInteractionForm({ leadId }: { leadId: string }) {
 
   async function handleSubmit() {
     if (!note.trim() && !recordingUrl) return;
+    if (isUploading) {
+      toast.warning("Please wait for the recording to finish uploading.");
+      return;
+    }
 
     if (timerRunning) stopTimer();
 
     const dur = type === InteractionType.CALL ? getDurationSecs() : undefined;
-    await addInteraction.mutateAsync({
-      type,
-      ...(note.trim() && { note: note.trim() }),
-      ...(recordingUrl && { callRecordingUrl: recordingUrl }),
-      ...(dur !== undefined && { callDurationSecs: dur }),
-    });
+    try {
+      await addInteraction.mutateAsync({
+        type,
+        ...(note.trim() && { note: note.trim() }),
+        ...(recordingUrl && { callRecordingUrl: recordingUrl }),
+        ...(dur !== undefined && { callDurationSecs: dur }),
+      });
+    } catch {
+      // useAddInteraction's onError shows the message; keep the draft so
+      // nothing typed is lost.
+      return;
+    }
 
     setNote("");
     setRecording(null);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Upload,
@@ -10,11 +10,15 @@ import {
   X,
   Download,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+// SheetJS is ~400 kB; load it only when a file is actually parsed or the
+// template is requested, never on page load.
+const loadXlsx = () => import("xlsx");
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/store/auth";
 import { useNotifications } from "@/store/notifications";
+import { useCampaignNamePreview } from "@/hooks/useCampaigns";
+import Link from "next/link";
 import api from "@/lib/api";
 import { extractApiError } from "@/lib/utils";
 import { Role } from "@lms/types";
@@ -58,7 +62,22 @@ type ImportResult = {
     existingLeadId: string;
   }>;
   errors: Array<{ rowIndex: number; reason: string }>;
+  campaign: { id: string; name: string } | null;
 };
+
+// Mirrors deriveCampaignName in @lms/core so the preview matches what the
+// server will create: strip extension, collapse _ and spaces, trim, cap.
+function deriveCampaignNameClient(fileName: string): string {
+  const base = fileName
+    .trim()
+    .replace(/\.[a-z0-9]{1,5}$/i, "")
+    .replace(/[_\s]+/g, " ")
+    .replace(/[^\p{L}\p{N} ()\-.&]/gu, "")
+    .trim()
+    .slice(0, 80)
+    .trim();
+  return base || "Import";
+}
 
 // COLUMN_MAP maps spreadsheet headers to internal field names
 const COLUMN_MAP: Record<string, string> = {
@@ -186,7 +205,8 @@ const COLUMN_MAP: Record<string, string> = {
   comments: "remarks",
 };
 
-function parseExcelFile(file: File): Promise<ParsedRow[]> {
+async function parseExcelFile(file: File): Promise<ParsedRow[]> {
+  const XLSX = await loadXlsx();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -298,6 +318,10 @@ export default function ImportPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [duplicateActions] = useState<Record<number, "skip" | "merge">>({});
+  // Campaign name: derived from the file, editable before import. The
+  // server versions a colliding name ("name (2)") — the preview shows that.
+  const [campaignName, setCampaignName] = useState("");
+  const namePreview = useCampaignNamePreview(campaignName.trim() || null);
   const [courses, setCourses] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
 
@@ -320,6 +344,7 @@ export default function ImportPage() {
     setFile(f);
     setResult(null);
     setParsedRows([]);
+    setCampaignName(deriveCampaignNameClient(f.name));
     try {
       const rows = await parseExcelFile(f);
       setParsedRows(rows);
@@ -340,10 +365,16 @@ export default function ImportPage() {
       const { data } = await api.post("/leads/import", {
         rows: parsedRows,
         duplicateActions,
+        fileName: file?.name,
+        campaignName: campaignName.trim() || undefined,
       });
       setResult(data.data);
       setPreview(false);
-      success(`Import complete! ${data.data.imported.length} leads imported.`);
+      const created = data.data.campaign as ImportResult["campaign"];
+      success(
+        `Import complete! ${data.data.imported.length} leads imported.`,
+        created ? `Campaign "${created.name}" created — assign it from Campaigns.` : undefined,
+      );
     } catch (e) {
       error("Import failed", extractApiError(e));
     } finally {
@@ -351,7 +382,8 @@ export default function ImportPage() {
     }
   }
 
-  const templateHref = useMemo(() => {
+  async function downloadTemplate() {
+    const XLSX = await loadXlsx();
     const ws = XLSX.utils.aoa_to_sheet([
       [
         "student name", "phone", "email", "father name",
@@ -375,8 +407,11 @@ export default function ImportPage() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Leads");
     const base64 = XLSX.write(wb, { bookType: "xlsx", type: "base64" }) as string;
-    return `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
-  }, []);
+    const a = document.createElement("a");
+    a.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
+    a.download = "lead-import-template.xlsx";
+    a.click();
+  }
 
   const validRows = parsedRows.filter((r) => r.phone && r.studentName);
   const invalidRows = parsedRows.filter((r) => !r.phone || !r.studentName);
@@ -392,14 +427,14 @@ export default function ImportPage() {
             Bulk import student leads from Excel or CSV
           </p>
         </div>
-        <a
-          href={templateHref}
-          download="lead-import-template.xlsx"
+        <button
+          type="button"
+          onClick={() => void downloadTemplate()}
           className="flex items-center gap-2 px-4 py-2 rounded-lg border border-surface-200 text-sm font-medium text-gray-600 hover:border-primary hover:text-primary transition-colors"
         >
           <Download size={14} />
           Download Template
-        </a>
+        </button>
       </div>
 
       {/* Course / Source reference */}
@@ -506,6 +541,36 @@ export default function ImportPage() {
             >
               <X size={16} />
             </button>
+          </div>
+
+          {/* Campaign name — derived from the file, editable, versioned on collision */}
+          <div className="bg-white border border-surface-200 rounded-xl p-4">
+            <label htmlFor="campaign-name" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Campaign name
+            </label>
+            <input
+              id="campaign-name"
+              value={campaignName}
+              onChange={(e) => setCampaignName(e.target.value)}
+              maxLength={80}
+              className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              placeholder="Campaign name"
+            />
+            <p className="text-xs text-gray-500 mt-1.5">
+              {campaignName.trim() === "" ? (
+                "Leave blank to import without a campaign."
+              ) : namePreview.data?.resolved && namePreview.data.resolved !== campaignName.trim() ? (
+                <>
+                  A campaign called <strong>{campaignName.trim()}</strong> already exists — this import will be
+                  created as <strong className="text-primary">{namePreview.data.resolved}</strong>.
+                </>
+              ) : (
+                <>
+                  These leads will be grouped as campaign <strong>{campaignName.trim()}</strong>. They still appear in the
+                  main Leads list.
+                </>
+              )}
+            </p>
           </div>
 
           {/* Stats */}
@@ -654,6 +719,15 @@ export default function ImportPage() {
               <p className="text-sm text-green-700 mt-0.5">
                 <strong>{result.imported.length}</strong> leads imported
                 successfully.
+                {result.campaign && (
+                  <>
+                    {" "}Grouped as campaign{" "}
+                    <Link href={`/campaigns?search=${encodeURIComponent(result.campaign.name)}&status=all`} className="font-semibold underline hover:text-green-900">
+                      {result.campaign.name}
+                    </Link>
+                    {" "}— assign it to employees from the Campaigns page.
+                  </>
+                )}
                 {result.duplicateQueue.length > 0 && (
                   <>
                     {" "}

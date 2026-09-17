@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import type {
   LeadStatus,
   LeadDetailResponse,
@@ -17,6 +18,7 @@ export function useLeadDetail(id: string) {
       const { data } = await api.get<LeadDetailResponse>(`/leads/${id}`);
       return data.data;
     },
+    enabled: !!id,
     refetchInterval: 30_000,
   });
 }
@@ -32,6 +34,7 @@ export function useLeadInteractions(leadId: string, type?: string) {
       );
       return data.data;
     },
+    enabled: !!leadId,
     refetchInterval: 30_000,
   });
 }
@@ -52,8 +55,9 @@ export function useAddInteraction(leadId: string) {
       toast.success("Interaction added");
       void qc.invalidateQueries({ queryKey: ["interactions", leadId] });
       void qc.invalidateQueries({ queryKey: ["lead", leadId] });
+      void qc.invalidateQueries({ queryKey: ["campaign-work"] });
     },
-    onError: () => toast.error("Failed to add interaction"),
+    onError: (err) => toast.error({ title: "Failed to add interaction", message: describeUploadError(err) }),
   });
 }
 
@@ -136,6 +140,8 @@ export function useAssignLeadDetail(leadId: string) {
 }
 
 // ── Upload file (recording or document) ──
+export const UPLOAD_LIMITS_MB = { recording: 50, document: 10 } as const;
+
 export function useUploadFile() {
   return useMutation({
     mutationFn: async (params: {
@@ -144,15 +150,35 @@ export function useUploadFile() {
     }) => {
       const formData = new FormData();
       formData.append("file", params.file);
+      // No manual Content-Type: the browser must set the multipart boundary.
+      // A hand-set "multipart/form-data" header yields "Boundary not found".
       const { data } = await api.post<{
         success: true;
         data: { url: string; key: string };
       }>(`/upload/${params.type}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 3 * 60_000, // large recordings on slow uplinks
       });
       return data.data;
     },
+    onError: (err) => {
+      toast.error({ title: "Upload failed", message: describeUploadError(err) });
+    },
   });
+}
+
+// Turns any upload failure into a sentence the user can act on.
+export function describeUploadError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    if (err.code === "ECONNABORTED") return "The upload timed out. Check your connection and try again.";
+    if (!err.response) return "Network error — the file could not reach the server.";
+    const status = err.response.status;
+    const serverMsg = (err.response.data as { error?: { message?: string } } | undefined)?.error?.message;
+    if (serverMsg) return serverMsg;
+    if (status === 413) return "File is too large.";
+    if (status === 401) return "Your session expired. Please log in again.";
+    return `Server error (${status}). Please try again.`;
+  }
+  return err instanceof Error ? err.message : "Something went wrong.";
 }
 
 // ── Confirmed application ──

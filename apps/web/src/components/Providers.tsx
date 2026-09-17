@@ -2,26 +2,17 @@
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import { ConfigProvider } from "antd";
 import { queryClient } from "@/lib/queryClient";
 import { ToastContainer } from "@/components/ui/Toast";
 
-const antTheme = {
-  token: {
-    colorPrimary: "#005826",
-    colorPrimaryHover: "#1a7340",
-    borderRadius: 8,
-    fontFamily: "Inter, system-ui, sans-serif",
-  },
-};
-
+// antd's ConfigProvider used to wrap this tree. No antd component is used
+// anywhere in the app, so it only added its runtime to every page's first
+// load. Removed as part of the LCP work.
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <ConfigProvider theme={antTheme}>
-        {children}
-        <ToastContainer />
-      </ConfigProvider>
+      {children}
+      <ToastContainer />
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );

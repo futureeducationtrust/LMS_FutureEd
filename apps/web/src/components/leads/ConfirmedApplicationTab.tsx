@@ -19,7 +19,7 @@ import {
   useUpdateConfirmedApplication,
 } from "@/hooks/useLeadDetail";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { extractApiError } from "@/lib/utils";
@@ -331,12 +331,11 @@ function DocumentUploadSection({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      // No manual Content-Type — the browser sets the multipart boundary.
       const { data: uploadData } = await api.post(
         "/upload/document",
         formData,
-        {
-          headers: { "Content-Type": "multipart/form-data" },
-        },
+        { timeout: 2 * 60_000 },
       );
       await api.post(`/leads/${leadId}/confirmed/documents`, {
         documentTypeId: selectedTypeId,

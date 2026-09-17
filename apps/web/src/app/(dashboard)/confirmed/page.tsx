@@ -421,7 +421,7 @@ export default function ConfirmedLeadsPage() {
                             href={`/leads/${lead.id}`}
                             className="inline-flex items-center px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-800 transition-colors shadow-sm"
                           >
-                            View Lead
+                            View Admission
                           </Link>
                         </td>
                       </tr>

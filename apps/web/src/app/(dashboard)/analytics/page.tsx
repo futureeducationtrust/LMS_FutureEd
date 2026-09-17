@@ -8,7 +8,7 @@ import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
 import { Button } from "@/components/ui/Button";
 import { Download } from "lucide-react";
 import api from "@/lib/api";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 export default function AnalyticsPage() {
   const { user } = useAuthStore();

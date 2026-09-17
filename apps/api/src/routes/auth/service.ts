@@ -140,12 +140,36 @@ export async function loginUser(params: {
 
 // ── Refresh ──
 
+export const REFRESHED_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  role: true,
+  isActive: true,
+  branchId: true,
+  branch: { select: { name: true, city: true } },
+  createdAt: true,
+} as const;
+
+export type RefreshedUser = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+  isActive: boolean;
+  branchId: string;
+  branch: { name: string; city: string } | null;
+  createdAt: Date;
+};
+
 export async function refreshAccessToken(params: {
   rawRefreshToken: string;
   prisma: PrismaClient;
   fastify: FastifyInstance;
 }): Promise<
-  | { accessToken: string; refreshToken: string }
+  | { accessToken: string; refreshToken: string; user: RefreshedUser }
   | { error: "INVALID_TOKEN" }
   | { error: "TOKEN_EXPIRED" }
 > {
@@ -154,7 +178,9 @@ export async function refreshAccessToken(params: {
 
   const storedToken = await prisma.refreshToken.findUnique({
     where: { tokenHash },
-    include: { user: true },
+    // Same projection as GET /auth/me so the client can skip that round trip
+    // on cold load — one fewer request before first paint.
+    include: { user: { select: REFRESHED_USER_SELECT } },
   });
 
   if (!storedToken) return { error: "INVALID_TOKEN" };
@@ -194,7 +220,7 @@ export async function refreshAccessToken(params: {
     await (fastify as any).redis?.del(`user-logout:${storedToken.user.id}`);
   } catch {}
 
-  return { accessToken, refreshToken: newRawToken };
+  return { accessToken, refreshToken: newRawToken, user: storedToken.user };
 }
 
 // ── Logout ──

@@ -58,6 +58,12 @@ export async function leadListRoute(fastify: FastifyInstance): Promise<void> {
       if (assignedToId) filters.assignedToId = assignedToId;
       if (query.courseId) filters.courseId = query.courseId;
       if (query.sourceId) filters.sourceId = query.sourceId;
+      if (query.campaignId) filters.campaignId = query.campaignId;
+      if (query.searchField) filters.searchField = query.searchField;
+      if (query.assignedToIds && role !== "EMPLOYEE") {
+        const ids = query.assignedToIds.split(",").map((s) => s.trim()).filter(Boolean);
+        if (ids.length > 0) filters.assignedToIds = ids;
+      }
       if (query.search) filters.search = query.search;
       if (query.dateFrom) filters.dateFrom = query.dateFrom;
       if (query.dateTo) filters.dateTo = query.dateTo;

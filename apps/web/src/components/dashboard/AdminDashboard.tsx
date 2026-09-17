@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { StatCard } from "./StatCard";
 import { PipelineChart } from "./PipelineChart";
+import { LazyMount } from "@/components/ui/LazyMount";
 import { ActivityFeed } from "./ActivityFeed";
 import { EmployeePerformanceTable } from "./EmployeePerformanceTable";
 import { FollowUpsDueToday } from "./FollowUpsDueToday";
@@ -160,7 +161,7 @@ export function AdminDashboard() {
       {/* Pipeline + Activity feed */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <PipelineChart />
+          <LazyMount minHeight={360} enabled={!isLoading}><PipelineChart /></LazyMount>
         </div>
         <ActivityFeed />
       </div>
@@ -175,8 +176,8 @@ export function AdminDashboard() {
 
       {/* Sources + Trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <LeadSourcesChart />
-        <TrendChart />
+        <LazyMount minHeight={360} enabled={!isLoading}><LeadSourcesChart /></LazyMount>
+        <LazyMount minHeight={360} enabled={!isLoading}><TrendChart /></LazyMount>
       </div>
     </div>
   );

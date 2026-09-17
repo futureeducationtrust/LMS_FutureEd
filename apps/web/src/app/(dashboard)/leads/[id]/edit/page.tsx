@@ -9,7 +9,7 @@ import { useLeadDetail, useUpdateLead } from "@/hooks/useLeadDetail";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import { Gender, MaritalStatus } from "@lms/types";
 
 const QUALIFICATIONS = [

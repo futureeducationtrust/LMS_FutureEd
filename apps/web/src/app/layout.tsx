@@ -40,6 +40,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+          Kick off the session refresh before any JS bundle has downloaded.
+          The auth store picks up this promise instead of starting its own
+          request after hydration, which takes the API round-trip out of the
+          critical path to first content. Only fires when a session cookie is
+          present, so logged-out visitors don't pay for a guaranteed 401.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "if(/(?:^|; )auth_session=/.test(document.cookie)){window.__earlyRefresh=fetch('/api/auth/refresh',{method:'POST',credentials:'same-origin'}).catch(function(){return null})}",
+          }}
+        />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>

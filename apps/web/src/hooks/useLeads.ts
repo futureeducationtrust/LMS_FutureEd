@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import { Role } from "@lms/types";
 import type { LeadStatus } from "@lms/types";
 import { useAuthStore } from "@/store/auth";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 export type LeadSummary = {
   id: string;
@@ -15,9 +15,20 @@ export type LeadSummary = {
   createdAt: string;
   isDuplicate: boolean;
   source: { id: string; name: string } | null;
+  campaign: { id: string; name: string } | null;
   assignedTo: { id: string; name: string; email: string; role: Role } | null;
   createdBy: { id: string; name: string };
   courses: Array<{ isPrimary: boolean; course: { id: string; name: string } }>;
+  // Present on the list payload; optional here so older callers still type-check.
+  city?: string | null;
+  district?: string | null;
+  fatherName?: string | null;
+  updatedAt?: string;
+  confirmedAt?: string | null;
+  confirmedApplication?: { admissionId: string | null; fileNumber: string | null } | null;
+  isFromWhatsApp?: boolean;
+  metaLeadgenId?: string | null;
+  metaAdName?: string | null;
 };
 
 export type LeadListResponse = {
@@ -36,8 +47,11 @@ export type LeadFilters = {
   interactionType?: string;     // e.g. "CALL" — leads with at least one of this type (any user)
   interactedByUserId?: string; // leads where this specific user logged any interaction
   assignedToId?: string;
+  assignedToIds?: string;      // comma-separated, may include "unassigned" — multi-select
+  searchField?: "all" | "name" | "phone" | "altPhone" | "email";
   courseId?: string;
   sourceId?: string;
+  campaignId?: string;         // a campaign id, or "none" for leads outside any campaign
   search?: string;
   dateFrom?: string;
   dateTo?: string;

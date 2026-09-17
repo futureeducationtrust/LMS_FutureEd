@@ -59,3 +59,17 @@ export type { CreateUserInput, UpdateUserInput } from "./user";
 // Branch
 export { CreateBranchSchema, UpdateBranchSchema } from "./branch";
 export type { CreateBranchInput, UpdateBranchInput } from "./branch";
+
+// Campaign
+export {
+  CampaignListQuerySchema,
+  AssignCampaignSchema,
+  UpdateCampaignSchema,
+  CampaignProgressSchema,
+} from "./campaign";
+export type {
+  CampaignListQuery,
+  AssignCampaignInput,
+  UpdateCampaignInput,
+  CampaignProgressInput,
+} from "./campaign";

@@ -49,17 +49,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, isBootstrapping: true });
     let refreshStatus: number | undefined;
     try {
-      // Call the same-origin Next.js proxy so iOS Safari's ITP never blocks the cookie
-      const refreshRes = await fetch("/api/auth/refresh", { method: "POST" });
+      // Call the same-origin Next.js proxy so iOS Safari's ITP never blocks the cookie.
+      // The root layout starts this request from an inline <head> script so it
+      // overlaps the JS download; reuse that response when it exists (once).
+      const early = (window as Window & { __earlyRefresh?: Promise<Response | null> }).__earlyRefresh;
+      delete (window as Window & { __earlyRefresh?: Promise<Response | null> }).__earlyRefresh;
+      const refreshRes = (early ? await early : null) ?? (await fetch("/api/auth/refresh", { method: "POST" }));
       refreshStatus = refreshRes.status;
       if (!refreshRes.ok) throw new Error("refresh_failed");
-      const refreshData = await refreshRes.json() as { data: { accessToken: string } };
+      const refreshData = await refreshRes.json() as { data: { accessToken: string; user?: AuthUser } };
       tokenStore.set(refreshData.data.accessToken);
 
-      // Then get user info
-      const { data: meData } = await api.get("/auth/me");
+      // The refresh response carries the user (same shape as /auth/me), so
+      // cold load is one round trip, not two. Older API builds omit it —
+      // fall back to /auth/me then.
+      const user = refreshData.data.user ?? (await api.get("/auth/me")).data.data;
       set({
-        user: meData.data,
+        user,
         isLoading: false,
         isBootstrapped: true,
         isBootstrapping: false,

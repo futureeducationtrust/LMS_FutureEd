@@ -9,6 +9,7 @@ import {
   Users,
   BarChart3,
   Upload,
+  Megaphone,
   GraduationCap,
   Tag,
   Settings,
@@ -40,6 +41,7 @@ type Props = {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Leads", href: "/leads", icon: Users },
+  { label: "Campaigns", href: "/campaigns", icon: Megaphone },
   {
     label: "Interested Lead",
     href: "/admissions",

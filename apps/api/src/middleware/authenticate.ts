@@ -48,13 +48,19 @@ export async function authenticate(
 
     // Stamp lastActiveAt — fire-and-forget, never block the request.
     // Throttled to once per minute via Redis to avoid a DB write on every API call.
-    const throttleKey = `lastActive:${userId}`;
-    const alreadyStamped = await request.server.redis.get(throttleKey);
-    if (!alreadyStamped) {
-      void request.server.prisma.user
-        .update({ where: { id: userId }, data: { lastActiveAt: new Date() } })
-        .catch(() => undefined); // never fail the request on DB error
-      await request.server.redis.setex(throttleKey, 60, "1");
+    // Isolated in its own try/catch: a Redis write failure (e.g. OOM at
+    // maxmemory) must never turn a valid token into a 401 — it did once.
+    try {
+      const throttleKey = `lastActive:${userId}`;
+      const alreadyStamped = await request.server.redis.get(throttleKey);
+      if (!alreadyStamped) {
+        void request.server.prisma.user
+          .update({ where: { id: userId }, data: { lastActiveAt: new Date() } })
+          .catch(() => undefined); // never fail the request on DB error
+        await request.server.redis.setex(throttleKey, 60, "1");
+      }
+    } catch (err) {
+      request.log.warn({ err }, "lastActive throttle write failed (non-fatal)");
     }
   } catch {
     await reply.status(401).send({

@@ -9,6 +9,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { PeriodSelector } from "./PeriodSelector";
 import { CustomDateRange } from "./CustomDateRange";
 import { EmployeeCallChart } from "./EmployeeCallChart";
+import { LazyMount } from "@/components/ui/LazyMount";
 import { StatusBadge } from "@/components/leads/StatusBadge";
 import { Spinner } from "@/components/ui/Spinner";
 import { useQuery } from "@tanstack/react-query";
@@ -294,7 +295,7 @@ export function EmployeeDashboard() {
       </div>
 
       {/* Call activity chart */}
-      <EmployeeCallChart />
+      <LazyMount minHeight={320} enabled={!isLoading}><EmployeeCallChart /></LazyMount>
 
       {/* Call records link */}
       <Link
