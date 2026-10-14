@@ -3,6 +3,7 @@ import {
   deriveCampaignName,
   nextVersionedName,
   distributeLeadsRoundRobin,
+  allocateLeadsByCount,
   resolveResumeIndex,
   neighbourIds,
 } from "./index";
@@ -43,6 +44,41 @@ describe("distributeLeadsRoundRobin", () => {
   });
   it("returns nothing when there are no assignees", () => {
     expect(distributeLeadsRoundRobin(["l1"], [])).toEqual([]);
+  });
+});
+
+describe("allocateLeadsByCount", () => {
+  const fresh = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `l${i + 1}`, assignedToId: null }));
+  const tally = (out: Array<{ assignedToId: string | null }>) =>
+    out.reduce<Record<string, number>>((m, o) => ((m[o.assignedToId ?? "none"] = (m[o.assignedToId ?? "none"] ?? 0) + 1), m), {});
+
+  it("gives each assignee exactly their count (200 → 80/60/40/20)", () => {
+    const out = allocateLeadsByCount(fresh(200), [
+      { userId: "a", count: 80 }, { userId: "b", count: 60 }, { userId: "c", count: 40 }, { userId: "d", count: 20 },
+    ]);
+    expect(tally(out)).toEqual({ a: 80, b: 60, c: 40, d: 20 });
+  });
+  it("leaves the remainder unassigned when counts sum below the total", () => {
+    const out = allocateLeadsByCount(fresh(10), [{ userId: "a", count: 3 }, { userId: "b", count: 2 }]);
+    expect(tally(out)).toEqual({ a: 3, b: 2, none: 5 });
+  });
+  it("keeps an assignee's existing leads when their count grows", () => {
+    const leads = [
+      { id: "l1", assignedToId: "b" }, { id: "l2", assignedToId: "a" },
+      { id: "l3", assignedToId: "b" }, { id: "l4", assignedToId: null },
+    ];
+    const out = allocateLeadsByCount(leads, [{ userId: "a", count: 2 }, { userId: "b", count: 2 }]);
+    expect(out).toEqual([
+      { leadId: "l1", assignedToId: "b" }, { leadId: "l2", assignedToId: "a" },
+      { leadId: "l3", assignedToId: "b" }, { leadId: "l4", assignedToId: "a" },
+    ]);
+  });
+  it("releases leads of users who were dropped or whose count shrank", () => {
+    const leads = [
+      { id: "l1", assignedToId: "a" }, { id: "l2", assignedToId: "a" }, { id: "l3", assignedToId: "x" },
+    ];
+    const out = allocateLeadsByCount(leads, [{ userId: "a", count: 1 }]);
+    expect(out.map((o) => o.assignedToId)).toEqual(["a", null, null]);
   });
 });
 

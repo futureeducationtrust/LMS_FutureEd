@@ -53,6 +53,7 @@ export {
   deriveCampaignName,
   nextVersionedName,
   distributeLeadsRoundRobin,
+  allocateLeadsByCount,
   resolveResumeIndex,
   neighbourIds,
 } from "./campaign";

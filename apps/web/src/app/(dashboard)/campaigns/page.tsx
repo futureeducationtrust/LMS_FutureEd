@@ -28,6 +28,7 @@ import { useNotifications } from "@/store/notifications";
 import {
   useCampaignList,
   useAssignCampaign,
+  useCampaign,
   useUpdateCampaign,
   type CampaignFilters,
   type CampaignRow,
@@ -135,22 +136,83 @@ function StatTile({ icon: Icon, label, value, tone }: { icon: React.ElementType;
 }
 
 // ── Assign modal ─────────────────────────────────────────────────────────
+// Pick any number of employees and give each any number of leads
+// (e.g. 200 → 80 / 60 / 40 / 20). Counts start as an even split; leads not
+// covered by the counts stay unassigned.
+function evenSplit(total: number, ids: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (ids.length === 0) return out;
+  const base = Math.floor(total / ids.length);
+  const extra = total % ids.length;
+  ids.forEach((id, i) => {
+    out[id] = base + (i < extra ? 1 : 0);
+  });
+  return out;
+}
+
 function AssignModal({ campaign, onClose }: { campaign: CampaignRow; onClose: () => void }) {
   const { data: users = [], isLoading } = useAssignableUsers();
+  const { data: detail } = useCampaign(campaign.id);
+  const available = campaign.assignableCount ?? campaign.leadCount;
   const [selected, setSelected] = useState<string[]>(campaign.assignees.map((a) => a.id));
+  const [counts, setCounts] = useState<Record<string, number>>(() =>
+    evenSplit(available, campaign.assignees.map((a) => a.id)),
+  );
+  // manual = the admin typed a count, so stop auto-rebalancing on (un)tick.
+  const [manual, setManual] = useState(false);
+  const [seeded, setSeeded] = useState(false);
   const assign = useAssignCampaign();
   const { success, error } = useNotifications();
 
+  // Once the current per-employee totals load, start from those (unless the
+  // admin already changed something) so reopening shows the real split.
+  if (detail && !seeded) {
+    setSeeded(true);
+    const current: Record<string, number> = {};
+    for (const a of detail.assignees) if (a.total > 0) current[a.id] = a.total;
+    if (!manual && Object.keys(current).length > 0) {
+      setSelected(Object.keys(current));
+      setCounts(current);
+      setManual(true);
+    }
+  }
+
+  const sum = selected.reduce((n, id) => n + (counts[id] ?? 0), 0);
+  const left = available - sum;
+  const invalid = selected.length === 0 || selected.some((id) => (counts[id] ?? 0) < 1) || left < 0;
+
   function toggle(id: string) {
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+    setSeeded(true);
+    const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+    setSelected(next);
+    setCounts((c) =>
+      manual ? { ...c, [id]: c[id] ?? Math.max(1, left) } : evenSplit(available, next),
+    );
+  }
+
+  function setCount(id: string, value: string) {
+    setSeeded(true);
+    setManual(true);
+    const n = Math.max(0, Math.floor(Number(value) || 0));
+    setCounts((c) => ({ ...c, [id]: n }));
+  }
+
+  function splitEvenly() {
+    setManual(false);
+    setCounts(evenSplit(available, selected));
   }
 
   async function submit() {
     try {
-      const r = await assign.mutateAsync({ id: campaign.id, userIds: selected });
+      const r = await assign.mutateAsync({
+        id: campaign.id,
+        userIds: selected,
+        counts: Object.fromEntries(selected.map((id) => [id, counts[id] ?? 0])),
+      });
       success(
         "Campaign assigned",
-        `${r.assigned} lead${r.assigned === 1 ? "" : "s"} across ${selected.length} employee${selected.length === 1 ? "" : "s"}`,
+        `${r.assigned} lead${r.assigned === 1 ? "" : "s"} across ${selected.length} employee${selected.length === 1 ? "" : "s"}` +
+          (r.unassigned > 0 ? ` · ${r.unassigned} left unassigned` : ""),
       );
       onClose();
     } catch (e) {
@@ -165,36 +227,65 @@ function AssignModal({ campaign, onClose }: { campaign: CampaignRow; onClose: ()
       title={`Assign "${campaign.name}"`}
       size="md"
       footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={submit} loading={assign.isPending} disabled={selected.length === 0}>
-            Assign {campaign.leadCount} lead{campaign.leadCount === 1 ? "" : "s"}
-          </Button>
+        <div className="flex items-center justify-between gap-2">
+          <span className={cn("text-xs tabular-nums", left < 0 ? "text-red-600 font-medium" : "text-gray-500")}>
+            {sum} of {available} assigned
+            {left > 0 && ` · ${left} unassigned`}
+            {left < 0 && ` · ${-left} too many`}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button onClick={submit} loading={assign.isPending} disabled={invalid}>
+              Assign {sum} lead{sum === 1 ? "" : "s"}
+            </Button>
+          </div>
         </div>
       }
     >
-      <p className="text-sm text-gray-600 mb-3">
-        <strong>All {campaign.leadCount} leads</strong> in this campaign will be split evenly across the employees you
-        pick, replacing any current assignee. Confirmed admissions are left as they are.
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <p className="text-sm text-gray-600">
+          Pick employees and set how many of the <strong>{available} leads</strong> each one gets. Each employee sees
+          this campaign with only their own leads. Confirmed admissions are left as they are.
+        </p>
+        <Button variant="secondary" onClick={splitEvenly} disabled={selected.length === 0}>
+          Split equally
+        </Button>
+      </div>
       {isLoading ? (
         <Spinner />
       ) : (
-        <div className="max-h-72 overflow-y-auto divide-y divide-surface-100 border border-surface-200 rounded-lg">
-          {users.map((u) => (
-            <label key={u.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-surface-50">
-              <input type="checkbox" className="accent-primary" checked={selected.includes(u.id)} onChange={() => toggle(u.id)} />
-              <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center justify-center">
-                {u.name.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="text-sm text-gray-800 flex-1">{u.name}</span>
-              <span className="text-[10px] uppercase tracking-wide text-gray-400">{u.role.replace("_", " ")}</span>
-            </label>
-          ))}
+        <div className="max-h-80 overflow-y-auto divide-y divide-surface-100 border border-surface-200 rounded-lg">
+          {users.map((u) => {
+            const on = selected.includes(u.id);
+            return (
+              <div key={u.id} className={cn("flex items-center gap-3 px-3 py-2", on && "bg-primary/5")}>
+                <label className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                  <input type="checkbox" className="accent-primary" checked={on} onChange={() => toggle(u.id)} />
+                  <span className="w-7 h-7 shrink-0 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center justify-center">
+                    {u.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="text-sm text-gray-800 truncate">{u.name}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-gray-400">{u.role.replace("_", " ")}</span>
+                </label>
+                {on && (
+                  <input
+                    type="number"
+                    min={1}
+                    max={available}
+                    value={counts[u.id] ?? 0}
+                    onChange={(e) => setCount(u.id, e.target.value)}
+                    aria-label={`Leads for ${u.name}`}
+                    title={`Leads for ${u.name}`}
+                    className={cn(
+                      "w-20 px-2 py-1 rounded-md border text-sm text-right tabular-nums outline-none focus:border-primary",
+                      (counts[u.id] ?? 0) < 1 ? "border-red-300" : "border-surface-200",
+                    )}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
-      )}
-      {selected.length > 0 && campaign.leadCount > 0 && (
-        <p className="text-xs text-gray-500 mt-2">≈ {Math.ceil(campaign.leadCount / selected.length)} leads each</p>
       )}
     </Modal>
   );
@@ -299,7 +390,7 @@ export default function CampaignsPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {isManager
-              ? "Your calling lists, one per Excel import. Assign a campaign and every lead in it is split across the team."
+              ? "Your calling lists, one per Excel import. Assign a campaign and choose how many of its leads each team member gets."
               : "Campaigns assigned to you. Open one to work its leads one at a time."}
           </p>
         </div>

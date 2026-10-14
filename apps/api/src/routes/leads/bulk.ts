@@ -14,6 +14,7 @@ import {
   invalidateAnalyticsCache,
 } from "../../services/cache";
 import { syncLeadFollowUpTask } from "../../services/followUpTasks";
+import { ensureCampaignMembership } from "../../services/campaignMembership";
 
 export async function bulkLeadRoutes(fastify: FastifyInstance): Promise<void> {
   // ── POST /leads/bulk-assign ──
@@ -92,6 +93,12 @@ export async function bulkLeadRoutes(fastify: FastifyInstance): Promise<void> {
             nextFollowUpAt: lead.nextFollowUpAt,
           });
         }
+
+        await ensureCampaignMembership(tx, {
+          leadIds: leadsToAssign.map((l) => l.id),
+          userId: assignedToId,
+          actorUserId: userId,
+        });
 
         // History rows only for leads that were actually moved (locked
         // CONFIRMED/DUPLICATE leads are skipped by the updateMany above).

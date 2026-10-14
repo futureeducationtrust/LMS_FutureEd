@@ -10,6 +10,7 @@ import {
 } from "@lms/types";
 import {
   distributeLeadsRoundRobin,
+  allocateLeadsByCount,
   nextVersionedName,
   resolveResumeIndex,
   neighbourIds,
@@ -31,11 +32,15 @@ const LOCKED_STATUSES = ["CONFIRMED", "DUPLICATE"] as const;
 // arrive, then id as a tiebreaker so pagination never skips or repeats.
 const WORK_ORDER = [{ createdAt: "asc" as const }, { id: "asc" as const }];
 
+// Thrown inside the assign transaction to roll it back with a 400.
+class AssignError extends Error {}
+
 type CampaignStats = {
   leadCount: number;
   newCount: number;       // still NEW — the campaign's "remaining"
   workedCount: number;    // leadCount − newCount
   unassignedCount: number;
+  assignableCount: number; // leadCount − confirmed/duplicate (what Assign can move)
   progress: number;       // 0..1
 };
 
@@ -46,7 +51,7 @@ async function campaignStats(
   const out = new Map<string, CampaignStats>();
   if (campaignIds.length === 0) return out;
 
-  const [totals, news, unassigned] = await Promise.all([
+  const [totals, news, unassigned, locked] = await Promise.all([
     prisma.lead.groupBy({
       by: ["campaignId"],
       where: { campaignId: { in: campaignIds } },
@@ -62,12 +67,18 @@ async function campaignStats(
       where: { campaignId: { in: campaignIds }, assignedToId: null },
       _count: { _all: true },
     }),
+    prisma.lead.groupBy({
+      by: ["campaignId"],
+      where: { campaignId: { in: campaignIds }, status: { in: [...LOCKED_STATUSES] } },
+      _count: { _all: true },
+    }),
   ]);
 
   const newMap = new Map(news.map((r) => [r.campaignId!, r._count._all]));
   const unMap = new Map(unassigned.map((r) => [r.campaignId!, r._count._all]));
+  const lockedMap = new Map(locked.map((r) => [r.campaignId!, r._count._all]));
   for (const id of campaignIds) {
-    out.set(id, { leadCount: 0, newCount: 0, workedCount: 0, unassignedCount: 0, progress: 0 });
+    out.set(id, { leadCount: 0, newCount: 0, workedCount: 0, unassignedCount: 0, assignableCount: 0, progress: 0 });
   }
   for (const r of totals) {
     const id = r.campaignId!;
@@ -79,6 +90,7 @@ async function campaignStats(
       newCount,
       workedCount,
       unassignedCount: unMap.get(id) ?? 0,
+      assignableCount: leadCount - (lockedMap.get(id) ?? 0),
       progress: leadCount > 0 ? workedCount / leadCount : 0,
     });
   }
@@ -100,7 +112,11 @@ async function assertCampaignAccess(
   });
   if (!campaign) return { campaign: null, allowed: false };
   if (user.role === Role.EMPLOYEE) {
-    const isAssignee = campaign.assignees.some((a) => a.userId === user.id);
+    // Member of the campaign, or owns at least one of its leads (leads
+    // handed out from the Leads page before membership was recorded).
+    const isAssignee =
+      campaign.assignees.some((a) => a.userId === user.id) ||
+      (await fastify.prisma.lead.count({ where: { campaignId, assignedToId: user.id }, take: 1 })) > 0;
     return { campaign, allowed: isAssignee };
   }
   if (user.role === Role.SUB_ADMIN && campaign.branchId !== user.branchId) {
@@ -141,7 +157,7 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Scope: employee → assigned campaigns only; sub-admin → own branch
     if (role === Role.EMPLOYEE) {
-      and.push({ assignees: { some: { userId } } });
+      and.push({ OR: [{ assignees: { some: { userId } } }, { leads: { some: { assignedToId: userId } } }] });
     } else if (role === Role.SUB_ADMIN) {
       and.push({ branchId: userBranchId });
     } else if (query.branchId) {
@@ -319,7 +335,7 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
       const { id } = request.params as { id: string };
       const v = validateBody(AssignCampaignSchema, request.body);
       if (!v.success) return reply.status(400).send({ success: false, ...v.error });
-      const { userIds, reason } = v.data;
+      const { userIds, counts, reason } = v.data;
       const { id: actorId, role: actorRole } = request.user;
 
       const { campaign, allowed } = await assertCampaignAccess(fastify, id, request.user);
@@ -358,18 +374,31 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
           orderBy: WORK_ORDER,
         });
 
-        const plan = distributeLeadsRoundRobin(leads.map((l) => l.id), assigneeIds);
+        let plan: Array<{ leadId: string; assignedToId: string | null }>;
+        if (counts) {
+          const requested = assigneeIds.reduce((sum, u) => sum + counts[u]!, 0);
+          if (requested > leads.length) {
+            throw new AssignError(
+              `Only ${leads.length} lead${leads.length === 1 ? "" : "s"} can be assigned in this campaign, but the counts add up to ${requested}.`,
+            );
+          }
+          plan = allocateLeadsByCount(leads, assigneeIds.map((u) => ({ userId: u, count: counts[u]! })));
+        } else {
+          plan = distributeLeadsRoundRobin(leads.map((l) => l.id), assigneeIds);
+        }
         const leadById = new Map(leads.map((l) => [l.id, l]));
 
         // Group updates per assignee so this is N updateMany calls, not N leads.
+        // Key "" = leads left unassigned by a custom split.
         const byAssignee = new Map<string, string[]>();
         for (const p of plan) {
-          const arr = byAssignee.get(p.assignedToId) ?? [];
+          const key = p.assignedToId ?? "";
+          const arr = byAssignee.get(key) ?? [];
           arr.push(p.leadId);
-          byAssignee.set(p.assignedToId, arr);
+          byAssignee.set(key, arr);
         }
-        for (const [assignedToId, leadIds] of byAssignee) {
-          await tx.lead.updateMany({ where: { id: { in: leadIds } }, data: { assignedToId } });
+        for (const [key, leadIds] of byAssignee) {
+          await tx.lead.updateMany({ where: { id: { in: leadIds } }, data: { assignedToId: key || null } });
         }
 
         // Keep the auto follow-up task on the new owner.
@@ -421,8 +450,22 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
           });
         }
 
-        return { assigned: plan.length, changed: changed.length, perAssignee: Object.fromEntries([...byAssignee].map(([k, v]) => [k, v.length])) };
+        const unassigned = byAssignee.get("")?.length ?? 0;
+        byAssignee.delete("");
+        return {
+          assigned: plan.length - unassigned,
+          unassigned,
+          changed: changed.length,
+          perAssignee: Object.fromEntries([...byAssignee].map(([k, v]) => [k, v.length])),
+        };
+      }).catch((err) => {
+        if (err instanceof AssignError) return err;
+        throw err;
       });
+
+      if (result instanceof AssignError) {
+        return reply.status(400).send({ success: false, error: { code: "INVALID_COUNTS", message: result.message } });
+      }
 
       await invalidateAnalyticsCache(fastify.redis);
       await invalidateActivityCache(fastify.redis, request.user.branchId, actorId);

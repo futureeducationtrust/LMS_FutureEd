@@ -24,6 +24,7 @@ export default function AdmissionsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [year, setYear] = useState("");
 
   useEffect(() => {
@@ -35,12 +36,12 @@ export default function AdmissionsPage() {
   }, [searchInput]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["admissions-leads", page, search, year],
+    queryKey: ["admissions-leads", page, pageSize, search, year],
     queryFn: async () => {
       const params = new URLSearchParams({
         status: "INTERESTED",
         page: String(page),
-        pageSize: "20",
+        pageSize: String(pageSize),
       });
       if (search) params.set("search", search);
       if (year) {
@@ -319,14 +320,17 @@ export default function AdmissionsPage() {
             </table>
           </div>
 
-          {data && data.totalPages > 1 && (
+          {data && data.total > 20 && (
             <Pagination
               page={data.page}
               pageSize={data.pageSize}
               total={data.total}
               totalPages={data.totalPages}
               onPageChange={setPage}
-              onPageSizeChange={() => {}}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
             />
           )}
         </>

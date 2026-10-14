@@ -23,11 +23,19 @@ export const CampaignListQuerySchema = z.object({
 });
 
 // ── Assign campaign to one or more employees ──
-// Policy: ALL leads in the campaign are (re)assigned across these users.
-export const AssignCampaignSchema = z.object({
-  userIds: z.array(z.string().cuid()).min(1).max(50),
-  reason: z.string().trim().max(500).optional(),
-});
+// Without `counts`: ALL leads are split evenly (round-robin) across userIds.
+// With `counts`: each user gets exactly that many leads (e.g. 80/60/40/20);
+// leads beyond the total are left unassigned.
+export const AssignCampaignSchema = z
+  .object({
+    userIds: z.array(z.string().cuid()).min(1).max(50),
+    counts: z.record(z.string().cuid(), z.number().int().min(1).max(100_000)).optional(),
+    reason: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => !v.counts || v.userIds.every((id) => v.counts![id] !== undefined), {
+    message: "Every selected employee needs a lead count",
+    path: ["counts"],
+  });
 
 // ── Rename / archive ──
 export const UpdateCampaignSchema = z

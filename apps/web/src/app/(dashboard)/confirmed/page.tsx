@@ -38,6 +38,7 @@ export default function ConfirmedLeadsPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [year, setYear] = useState("");
   const [period, setPeriod] = useState<ConfirmedPeriod>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -76,12 +77,12 @@ export default function ConfirmedLeadsPage() {
         : getISTDateRange(period as QuickPeriod);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["confirmed-leads", page, search, dateFrom, dateTo, year],
+    queryKey: ["confirmed-leads", page, pageSize, search, dateFrom, dateTo, year],
     queryFn: async () => {
       const params = new URLSearchParams({
         status: "CONFIRMED",
         page: String(page),
-        pageSize: "20",
+        pageSize: String(pageSize),
       });
       if (search) params.set("search", search);
       if (dateFrom) params.set("dateFrom", dateFrom);
@@ -432,14 +433,17 @@ export default function ConfirmedLeadsPage() {
             </div>
           </div>
 
-          {data && data.totalPages > 1 && (
+          {data && data.total > 20 && (
             <Pagination
               page={data.page}
               pageSize={data.pageSize}
               total={data.total}
               totalPages={data.totalPages}
               onPageChange={setPage}
-              onPageSizeChange={() => {}}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
             />
           )}
         </>

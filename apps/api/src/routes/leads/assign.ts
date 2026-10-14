@@ -9,6 +9,7 @@ import {
   invalidateActivityCache,
 } from "../../services/cache";
 import { syncLeadFollowUpTask } from "../../services/followUpTasks";
+import { ensureCampaignMembership } from "../../services/campaignMembership";
 
 export async function assignLeadRoute(fastify: FastifyInstance): Promise<void> {
   fastify.post(
@@ -105,6 +106,12 @@ export async function assignLeadRoute(fastify: FastifyInstance): Promise<void> {
           assignedToId,
           actorUserId: userId,
           nextFollowUpAt: lead.nextFollowUpAt,
+        });
+
+        await ensureCampaignMembership(tx, {
+          leadIds: [id],
+          userId: assignedToId,
+          actorUserId: userId,
         });
 
         await tx.assignmentHistory.create({

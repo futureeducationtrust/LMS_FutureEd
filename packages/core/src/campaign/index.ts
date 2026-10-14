@@ -34,6 +34,43 @@ export function nextVersionedName(base: string, existingNames: string[]): string
   return `${base} (${Date.now()})`;
 }
 
+// Split leads by an explicit count per assignee (e.g. 80 / 60 / 40 / 20).
+// Minimal churn: each assignee first keeps leads they already own (in the
+// given order) up to their count; the shortfall is filled from the pool of
+// everyone else's leads, in order. Leads beyond the total end up null
+// (unassigned). Returns one entry per lead.
+export function allocateLeadsByCount(
+  leads: Array<{ id: string; assignedToId: string | null }>,
+  allocations: Array<{ userId: string; count: number }>,
+): Array<{ leadId: string; assignedToId: string | null }> {
+  const target = new Map<string, number>();
+  for (const a of allocations) target.set(a.userId, Math.max(0, Math.floor(a.count)));
+
+  const owner = new Map<string, string | null>();
+  const kept = new Map<string, number>();
+  for (const l of leads) {
+    const want = l.assignedToId ? target.get(l.assignedToId) : undefined;
+    const have = l.assignedToId ? kept.get(l.assignedToId) ?? 0 : 0;
+    if (l.assignedToId && want !== undefined && have < want) {
+      owner.set(l.id, l.assignedToId);
+      kept.set(l.assignedToId, have + 1);
+    }
+  }
+
+  const pool = leads.filter((l) => !owner.has(l.id));
+  let next = 0;
+  for (const a of allocations) {
+    let need = (target.get(a.userId) ?? 0) - (kept.get(a.userId) ?? 0);
+    while (need > 0 && next < pool.length) {
+      owner.set(pool[next]!.id, a.userId);
+      next++;
+      need--;
+    }
+  }
+
+  return leads.map((l) => ({ leadId: l.id, assignedToId: owner.get(l.id) ?? null }));
+}
+
 // Round-robin every lead across the assignees, in a stable order.
 // Returns one entry per lead so the caller can write assignedToId and
 // AssignmentHistory in a single pass.

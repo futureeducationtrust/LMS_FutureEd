@@ -16,6 +16,7 @@ export type CampaignRow = {
   newCount: number;
   workedCount: number;
   unassignedCount: number;
+  assignableCount: number; // excludes confirmed/duplicate leads
   progress: number; // 0..1
 };
 
@@ -108,11 +109,21 @@ export function useCampaignNamePreview(base: string | null) {
 export function useAssignCampaign() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, userIds, reason }: { id: string; userIds: string[]; reason?: string }) => {
+    mutationFn: async ({
+      id,
+      userIds,
+      counts,
+      reason,
+    }: {
+      id: string;
+      userIds: string[];
+      counts?: Record<string, number>; // leads per user; omitted → even split
+      reason?: string;
+    }) => {
       const { data } = await api.post<{
         success: true;
-        data: { assigned: number; changed: number; perAssignee: Record<string, number> };
-      }>(`/campaigns/${id}/assign`, { userIds, reason });
+        data: { assigned: number; unassigned: number; changed: number; perAssignee: Record<string, number> };
+      }>(`/campaigns/${id}/assign`, { userIds, counts, reason });
       return data.data;
     },
     onSuccess: (_d, vars) => {

@@ -3,9 +3,11 @@ import type { AxiosInstance, AxiosError } from "axios";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
+// No default Content-Type. Axios sets application/json itself for object
+// bodies, and a JSON default makes axios serialise FormData to JSON
+// (File → {}), which broke every recording/document upload.
 const api: AxiosInstance = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
-  headers: { "Content-Type": "application/json" },
   withCredentials: true,
 });
 
