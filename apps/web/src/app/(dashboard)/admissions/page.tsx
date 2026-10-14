@@ -8,6 +8,7 @@ import api from "@/lib/api";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { ExportExcelButton } from "@/components/leads/ExportExcelButton";
 import { useAuthStore } from "@/store/auth";
 import { Role } from "@lms/types";
 import { formatTimeAgo } from "@/lib/utils";
@@ -71,15 +72,27 @@ export default function AdmissionsPage() {
             In-progress interested leads{data && ` · ${data.total} total`}
           </p>
         </div>
-        <button
-          type="button"
-          title="Refresh"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          className="p-2 rounded-lg border border-surface-200 text-gray-500 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-2">
+          <ExportExcelButton
+            mode="interested"
+            fileName="interested-leads"
+            params={{
+              status: "INTERESTED",
+              search,
+              dateFrom: year ? `${year}-01-01` : undefined,
+              dateTo: year ? `${year}-12-31` : undefined,
+            }}
+          />
+          <button
+            type="button"
+            title="Refresh"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="p-2 rounded-lg border border-surface-200 text-gray-500 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={isFetching ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-surface-200 rounded-xl p-4 flex flex-wrap gap-3">

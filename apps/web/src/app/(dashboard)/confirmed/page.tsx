@@ -8,6 +8,7 @@ import api from "@/lib/api";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Pagination } from "@/components/ui/Pagination";
+import { ExportExcelButton } from "@/components/leads/ExportExcelButton";
 import { CustomDateRange } from "@/components/dashboard/CustomDateRange";
 import { useAuthStore } from "@/store/auth";
 import { Role } from "@lms/types";
@@ -129,6 +130,18 @@ export default function ConfirmedLeadsPage() {
             <Sparkles size={14} />
             Direct Admission
           </Link>
+          <ExportExcelButton
+            mode="admissions"
+            fileName="admissions"
+            params={{
+              status: "CONFIRMED",
+              search,
+              dateFrom,
+              dateTo,
+              dateBy: dateFrom || dateTo ? "confirmedAt" : undefined,
+              admissionYear: year,
+            }}
+          />
           <button
             type="button"
             title="Refresh"

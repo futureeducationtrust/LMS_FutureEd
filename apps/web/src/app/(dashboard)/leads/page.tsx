@@ -22,6 +22,7 @@ import { EmptyLeads } from "@/components/leads/EmptyLeads";
 import { Pagination } from "@/components/ui/Pagination";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { ExportExcelButton } from "@/components/leads/ExportExcelButton";
 import { useAuthStore } from "@/store/auth";
 import { useNotifications } from "@/store/notifications";
 import { Role, LeadStatus } from "@lms/types";
@@ -222,6 +223,7 @@ export default function LeadsPage() {
           >
             <RefreshCw size={15} className={cn(isFetching && "animate-spin")} />
           </button>
+          <ExportExcelButton params={filters} mode="leads" fileName="leads" />
           <div className="hidden md:block">
             <ColumnChooser keys={leadColumns.keys} available={leadColumns.available} onChange={leadColumns.update} onReset={leadColumns.reset} />
           </div>
