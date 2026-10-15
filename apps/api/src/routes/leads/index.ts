@@ -618,9 +618,12 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       // fileName → campaign name (policy b: a colliding name is versioned,
       // "name (2)", never appended to). campaignName lets the UI override
       // the derived name; both optional so older clients keep working.
-      const { rows, fileName, campaignName } = request.body as {
+      // dryRun: classify rows (new / duplicate / error) without writing, so
+      // the client can confirm before a campaign is created.
+      const { rows, fileName, campaignName, dryRun } = request.body as {
         fileName?: string;
         campaignName?: string;
+        dryRun?: boolean;
         rows: Array<{
           rowIndex: number;
           studentName: string;
@@ -764,12 +767,39 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
         existingLeads as any,
       );
 
-      // One campaign per import, named after the file. Created up front so
-      // every lead below carries campaignId; if zero leads end up created
-      // the empty campaign is removed again at the end.
+      // Rows that will actually be inserted: non-duplicate with a valid phone.
+      const importErrors: Array<{ rowIndex: number; reason: string }> = [];
+      const importable: Array<(typeof result.imported)[number] & { phone: string }> = [];
+      for (const row of result.imported) {
+        const phone = normalizeImportPhone(row.phone) ?? row.phone;
+        if (!/^[6-9]\d{9}$/.test(phone)) {
+          importErrors.push({
+            rowIndex: row.rowIndex,
+            reason: `Invalid phone number: ${row.phone}`,
+          });
+          continue;
+        }
+        importable.push({ ...row, phone });
+      }
+
+      if (dryRun) {
+        return reply.status(200).send({
+          success: true,
+          data: {
+            newCount: importable.length,
+            duplicateCount: result.duplicateQueue.length,
+            errorCount: result.errors.length + importErrors.length,
+          },
+        });
+      }
+
+      // One campaign per import, named after the file — only when there is
+      // at least one new lead, so an all-duplicate file creates no campaign.
+      // Created up front so every lead below carries campaignId; if zero
+      // leads end up created the empty campaign is removed again at the end.
       let campaign: { id: string; name: string } | null = null;
       const requestedName = (campaignName?.trim() || (fileName ? deriveCampaignName(fileName) : "")).trim();
-      if (requestedName) {
+      if (requestedName && importable.length > 0) {
         const existing = await fastify.prisma.campaign.findMany({
           where: { branchId },
           select: { name: true },
@@ -783,18 +813,8 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Create clean leads
       const created = [];
-      const importErrors: Array<{ rowIndex: number; reason: string }> = [];
-      for (const row of result.imported) {
-        // Validate phone after normalization
-        const phone = normalizeImportPhone(row.phone) ?? row.phone;
-        if (!/^[6-9]\d{9}$/.test(phone)) {
-          importErrors.push({
-            rowIndex: row.rowIndex,
-            reason: `Invalid phone number: ${row.phone}`,
-          });
-          continue;
-        }
-
+      for (const row of importable) {
+        const { phone } = row;
         try {
           // Resolve source id
           const sourceId = row.source

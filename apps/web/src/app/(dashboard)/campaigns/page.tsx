@@ -54,10 +54,10 @@ dayjs.extend(relativeTime);
 type StatusFilter = NonNullable<CampaignFilters["status"]>;
 
 const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "completed", label: "Completed" },
   { value: "archived", label: "Archived" },
-  { value: "all", label: "All" },
 ];
 
 const SORT_OPTIONS: Array<{ value: NonNullable<CampaignFilters["sortBy"]>; label: string }> = [
@@ -342,7 +342,7 @@ export default function CampaignsPage() {
       page: Number(sp.get("page") ?? 1),
       pageSize: Number(sp.get("pageSize") ?? 20),
       search: sp.get("search") ?? "",
-      status: (sp.get("status") as StatusFilter) ?? "active",
+      status: (sp.get("status") as StatusFilter) ?? "all",
       assigneeId: sp.get("assigneeId") ?? "",
       dateFrom: sp.get("dateFrom") ?? "",
       dateTo: sp.get("dateTo") ?? "",
@@ -495,7 +495,7 @@ export default function CampaignsPage() {
         ) : !data || data.campaigns.length === 0 ? (
           <EmptyState
             icon={<ListFilter size={28} />}
-            title={filters.status === "active" && activeFilterCount === 0 ? "No active campaigns" : "No campaigns match"}
+            title={filters.status === "all" && activeFilterCount === 0 ? "No campaigns yet" : "No campaigns match"}
             description={isManager ? "Import an Excel file — each import becomes a campaign named after the file." : "Nothing has been assigned to you yet."}
             {...(isManager ? { action: { label: "Import leads", onClick: () => router.push("/import") } } : {})}
           />

@@ -15,6 +15,7 @@ import {
 const loadXlsx = () => import("xlsx");
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Modal } from "@/components/ui/Modal";
 import { useAuthStore } from "@/store/auth";
 import { useNotifications } from "@/store/notifications";
 import { useCampaignNamePreview } from "@/hooks/useCampaigns";
@@ -63,6 +64,12 @@ type ImportResult = {
   }>;
   errors: Array<{ rowIndex: number; reason: string }>;
   campaign: { id: string; name: string } | null;
+};
+
+type ImportCheck = {
+  newCount: number;
+  duplicateCount: number;
+  errorCount: number;
 };
 
 // Mirrors deriveCampaignName in @lms/core so the preview matches what the
@@ -317,6 +324,10 @@ export default function ImportPage() {
   const [preview, setPreview] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
+  // Pre-import duplicate check → confirm popup; then a summary popup.
+  const [checking, setChecking] = useState(false);
+  const [check, setCheck] = useState<ImportCheck | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [duplicateActions] = useState<Record<number, "skip" | "merge">>({});
   // Campaign name: derived from the file, editable before import. The
   // server versions a colliding name ("name (2)") — the preview shows that.
@@ -357,8 +368,27 @@ export default function ImportPage() {
     }
   }
 
+  async function handleCheck() {
+    if (!parsedRows.length) return;
+    setChecking(true);
+    try {
+      const { data } = await api.post("/leads/import", {
+        rows: parsedRows,
+        fileName: file?.name,
+        campaignName: campaignName.trim() || undefined,
+        dryRun: true,
+      });
+      setCheck(data.data as ImportCheck);
+    } catch (e) {
+      error("Duplicate check failed", extractApiError(e));
+    } finally {
+      setChecking(false);
+    }
+  }
+
   async function handleImport() {
     if (!parsedRows.length) return;
+    setCheck(null);
     setImporting(true);
 
     try {
@@ -370,6 +400,7 @@ export default function ImportPage() {
       });
       setResult(data.data);
       setPreview(false);
+      setSummaryOpen(true);
       const created = data.data.campaign as ImportResult["campaign"];
       success(
         `Import complete! ${data.data.imported.length} leads imported.`,
@@ -558,7 +589,7 @@ export default function ImportPage() {
             />
             <p className="text-xs text-gray-500 mt-1.5">
               {campaignName.trim() === "" ? (
-                "Leave blank to import without a campaign."
+                "Leave blank to name the campaign after the file."
               ) : namePreview.data?.resolved && namePreview.data.resolved !== campaignName.trim() ? (
                 <>
                   A campaign called <strong>{campaignName.trim()}</strong> already exists — this import will be
@@ -697,8 +728,8 @@ export default function ImportPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => void handleImport()}
-              loading={importing}
+              onClick={() => void handleCheck()}
+              loading={checking || importing}
               disabled={validRows.length === 0}
             >
               Import {validRows.length} Leads
@@ -796,6 +827,108 @@ export default function ImportPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Pre-import duplicate check */}
+      {check && check.newCount === 0 && (
+        <Modal
+          open
+          onClose={() => setCheck(null)}
+          title="No campaign created"
+          footer={<Button onClick={() => setCheck(null)}>OK</Button>}
+        >
+          <div className="flex gap-3">
+            <AlertCircle size={20} className="text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-gray-700">
+              {check.duplicateCount > 0 ? (
+                <>
+                  All <strong>{check.duplicateCount}</strong> leads in this file are duplicates — they
+                  already exist in the system.
+                </>
+              ) : (
+                <>This file has no valid new leads.</>
+              )}{" "}
+              No leads were inserted and no campaign was created.
+              {check.errorCount > 0 && (
+                <> <strong>{check.errorCount}</strong> rows had errors.</>
+              )}
+            </p>
+          </div>
+        </Modal>
+      )}
+      {check && check.newCount > 0 && (
+        <Modal
+          open
+          onClose={() => setCheck(null)}
+          title="Confirm import"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setCheck(null)}>
+                Cancel
+              </Button>
+              <Button onClick={() => void handleImport()} loading={importing}>
+                Continue
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-2 text-sm text-gray-700">
+            <p>
+              <strong>{check.newCount}</strong> new leads will be imported
+              {campaignName.trim() && (
+                <>
+                  {" "}into campaign <strong>{namePreview.data?.resolved ?? campaignName.trim()}</strong>
+                </>
+              )}
+              .
+            </p>
+            {check.duplicateCount > 0 && (
+              <p className="text-amber-700">
+                <strong>{check.duplicateCount}</strong> leads are duplicates and will not be inserted.
+              </p>
+            )}
+            {check.errorCount > 0 && (
+              <p className="text-red-600">
+                <strong>{check.errorCount}</strong> rows have errors and will be skipped.
+              </p>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Post-import summary */}
+      {result && (
+        <Modal
+          open={summaryOpen}
+          onClose={() => setSummaryOpen(false)}
+          title={result.campaign ? "Campaign created" : "Import complete"}
+          footer={<Button onClick={() => setSummaryOpen(false)}>OK</Button>}
+        >
+          <div className="space-y-2 text-sm text-gray-700">
+            <p>
+              {result.campaign ? (
+                <>
+                  In campaign <strong>{result.campaign.name}</strong>,{" "}
+                  <strong>{result.imported.length}</strong> leads were created.
+                </>
+              ) : (
+                <>
+                  <strong>{result.imported.length}</strong> leads were created.
+                </>
+              )}
+            </p>
+            {result.duplicateQueue.length > 0 && (
+              <p className="text-amber-700">
+                <strong>{result.duplicateQueue.length}</strong> others are duplicates, so they were not inserted.
+              </p>
+            )}
+            {result.errors.length > 0 && (
+              <p className="text-red-600">
+                <strong>{result.errors.length}</strong> rows had errors and were skipped.
+              </p>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );

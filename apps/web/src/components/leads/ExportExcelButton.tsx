@@ -6,12 +6,13 @@ import dayjs from "dayjs";
 import api from "@/lib/api";
 import toast from "@/lib/toast";
 import { Button } from "@/components/ui/Button";
+import { useAuthStore } from "@/store/auth";
+import { Role } from "@lms/types";
 import { extractApiError } from "@/lib/utils";
 
 // Excel export for the Leads / Interested / Admissions lists. Sends the
 // page's current filters to GET /leads/export (same filters as the list,
-// no paging) and builds the .xlsx in the browser. Available to every
-// role; the server scopes employees to their own leads.
+// no paging) and builds the .xlsx in the browser.
 
 type ExportLead = {
   studentName: string;
@@ -134,7 +135,9 @@ export function ExportExcelButton({
   mode: ExportMode;
   fileName: string; // without extension; date is appended
 }) {
+  const { user } = useAuthStore();
   const [busy, setBusy] = useState(false);
+  if (user?.role !== Role.ADMIN && user?.role !== Role.SUB_ADMIN) return null;
 
   async function run() {
     setBusy(true);

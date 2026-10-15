@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { authenticate } from "../../middleware/authenticate";
-import { LeadListQuerySchema } from "@lms/types";
+import { authorize } from "../../middleware/authorize";
+import { LeadListQuerySchema, Role as RoleEnum } from "@lms/types";
 import type { LeadListQuery } from "@lms/types";
 import { validateQuery } from "../../middleware/validate";
 import { buildLeadWhereClause, leadSummarySelect } from "./service";
@@ -162,11 +163,10 @@ export async function leadListRoute(fastify: FastifyInstance): Promise<void> {
 
   // ── GET /leads/export — every lead matching the list filters, for Excel ──
   // Same filters as GET /leads, no paging. The browser builds the .xlsx.
-  // Every role may export; buildLeadWhereClause keeps employees to their
-  // own leads, exactly as in the list.
+  // Managers only: an export is the whole dataset leaving the system.
   fastify.get(
     "/export",
-    { preHandler: authenticate },
+    { preHandler: [authenticate, authorize([RoleEnum.ADMIN, RoleEnum.SUB_ADMIN])] },
     async (request, reply) => {
       const qValidation = validateQuery(LeadListQuerySchema, request.query);
       if (!qValidation.success) {
