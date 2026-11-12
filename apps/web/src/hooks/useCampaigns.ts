@@ -90,6 +90,22 @@ export function useCampaign(id: string | null | undefined) {
   });
 }
 
+// Campaigns a manager can add leads to (import page / new-lead form).
+// Archived ones are excluded — the API rejects adding to them.
+export function useWritableCampaignOptions(enabled = true) {
+  return useQuery({
+    queryKey: ["campaign-options", "writable"],
+    queryFn: async () => {
+      const { data } = await api.get<{ data: { campaigns: Array<{ id: string; name: string; isArchived: boolean; leadCount: number }> } }>(
+        "/campaigns?status=all&pageSize=80&sortBy=createdAt&sortOrder=desc",
+      );
+      return data.data.campaigns.filter((c) => !c.isArchived);
+    },
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 // Lightweight name list for the import page: shows what the campaign will
 // be called after versioning ("Leads (2)").
 export function useCampaignNamePreview(base: string | null) {

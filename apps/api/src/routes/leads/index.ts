@@ -24,6 +24,7 @@ import {
 } from "../../services/cache";
 import { QUEUES } from "../../plugins/bullmq";
 import { findDuplicateLeads } from "./service";
+import { resolveWritableCampaign } from "../../services/campaignMembership";
 
 // Fields the client is allowed to write on ConfirmedApplication.
 // Never include auto-generated IDs, timestamps, or audit tracking fields.
@@ -622,9 +623,11 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       // the derived name; both optional so older clients keep working.
       // dryRun: classify rows (new / duplicate / error) without writing, so
       // the client can confirm before a campaign is created.
-      const { rows, fileName, campaignName, dryRun } = request.body as {
+      // campaignId: append to that existing campaign instead of creating one.
+      const { rows, fileName, campaignName, campaignId, dryRun } = request.body as {
         fileName?: string;
         campaignName?: string;
+        campaignId?: string;
         dryRun?: boolean;
         rows: Array<{
           rowIndex: number;
@@ -694,7 +697,20 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
         return /^[6-9]\d{9}$/.test(candidate) ? candidate : null;
       }
 
-      const { id: userId, branchId } = request.user;
+      const { id: userId } = request.user;
+      let { branchId } = request.user;
+
+      // Target campaign check runs before any work so a bad id fails fast
+      // (dry run included). Appended leads take the campaign's branch.
+      let targetCampaign: { id: string; name: string } | null = null;
+      if (campaignId) {
+        const r = await resolveWritableCampaign(fastify.prisma, campaignId, request.user);
+        if (!r.ok) {
+          return reply.status(r.status).send({ success: false, error: { code: r.code, message: r.message } });
+        }
+        targetCampaign = { id: r.campaign.id, name: r.campaign.name };
+        branchId = r.campaign.branchId;
+      }
 
       // Pre-fetch courses and source types for name→id resolution
       const [allCourses, allSources] = await Promise.all([
@@ -799,9 +815,9 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
       // at least one new lead, so an all-duplicate file creates no campaign.
       // Created up front so every lead below carries campaignId; if zero
       // leads end up created the empty campaign is removed again at the end.
-      let campaign: { id: string; name: string } | null = null;
+      let campaign: { id: string; name: string } | null = targetCampaign;
       const requestedName = (campaignName?.trim() || (fileName ? deriveCampaignName(fileName) : "")).trim();
-      if (requestedName && importable.length > 0) {
+      if (!targetCampaign && requestedName && importable.length > 0) {
         const existing = await fastify.prisma.campaign.findMany({
           where: { branchId },
           select: { name: true },
@@ -886,8 +902,9 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
 
-      // Nothing imported → don't leave an empty campaign behind.
-      if (campaign && created.length === 0) {
+      // Nothing imported → don't leave an empty campaign behind (never
+      // touch a campaign we were appending to).
+      if (campaign && !targetCampaign && created.length === 0) {
         await fastify.prisma.campaign.delete({ where: { id: campaign.id } }).catch(() => {});
         campaign = null;
       }
@@ -899,6 +916,7 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
           duplicateQueue: result.duplicateQueue,
           errors: [...result.errors, ...importErrors],
           campaign,
+          appended: !!targetCampaign,
         },
       });
     },

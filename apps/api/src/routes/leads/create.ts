@@ -15,6 +15,11 @@ import {
   invalidateActivityCache,
 } from "../../services/cache";
 import { syncLeadFollowUpTask } from "../../services/followUpTasks";
+import {
+  resolveWritableCampaign,
+  ensureCampaignMembership,
+  type WritableCampaign,
+} from "../../services/campaignMembership";
 
 export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
   fastify.post(
@@ -29,7 +34,21 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
       }
       const body = validation.data;
 
-      const { id: userId, branchId } = request.user;
+      const { id: userId } = request.user;
+      let { branchId } = request.user;
+
+      // ── Step 0: Target campaign (optional) ──
+      // Checked before duplicate handling so a bad/forbidden campaign never
+      // half-applies. A campaign lead takes the campaign's branch.
+      let campaign: WritableCampaign | null = null;
+      if (body.campaignId) {
+        const r = await resolveWritableCampaign(fastify.prisma, body.campaignId, request.user);
+        if (!r.ok) {
+          return reply.status(r.status).send({ success: false, error: { code: r.code, message: r.message } });
+        }
+        campaign = r.campaign;
+        branchId = campaign.branchId;
+      }
 
       // ── Step 1: Duplicate detection ──
       const existingLeads = await findDuplicateLeads({
@@ -204,7 +223,10 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
       // ── Step 2: Resolve assignee ──
       // Default to self-assign for all roles; admin/sub-admin can optionally
       // pass a different assignedToId in the form body to assign elsewhere.
-      const assignedToId: string | null = body.assignedToId ?? userId;
+      // Campaign leads start unassigned (like an Excel import) so the
+      // campaign's Assign split hands them out, unless an assignee is given.
+      const assignedToId: string | null =
+        body.assignedToId ?? (campaign ? null : userId);
 
       // ── Step 3: Create lead ──
       const lead = await fastify.prisma.$transaction(async (tx) => {
@@ -237,11 +259,22 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
             sendSms: body.sendSms ?? false,
             sendEmail: body.sendEmail ?? false,
             branchId,
+            campaignId: campaign?.id ?? null,
             createdById: userId,
             assignedToId: assignedToId ?? null,
             status: LeadStatus.NEW,
           },
         });
+
+        // Owner of a campaign lead becomes a campaign member so it shows
+        // in their Campaigns list.
+        if (campaign && assignedToId) {
+          await ensureCampaignMembership(tx, {
+            leadIds: [newLead.id],
+            userId: assignedToId,
+            actorUserId: userId,
+          });
+        }
 
         // Add courses
         if (body.courseIds && body.courseIds.length > 0) {
@@ -260,7 +293,11 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
             leadId: newLead.id,
             userId,
             action: "LEAD_CREATED",
-            newValue: { studentName: body.studentName, phone: body.phone },
+            newValue: {
+              studentName: body.studentName,
+              phone: body.phone,
+              ...(campaign ? { campaignId: campaign.id } : {}),
+            },
           },
         });
 
@@ -270,7 +307,7 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
             leadId: newLead.id,
             userId,
             type: "NOTE",
-            note: "Lead created",
+            note: campaign ? `Lead created in campaign "${campaign.name}"` : "Lead created",
             statusAfter: LeadStatus.NEW,
           },
         });
@@ -297,7 +334,10 @@ export async function createLeadRoute(fastify: FastifyInstance): Promise<void> {
       }
       await invalidateAnalyticsCache(fastify.redis);
       await invalidateActivityCache(fastify.redis, branchId, userId);
-      return reply.status(201).send({ success: true, data: { lead } });
+      return reply.status(201).send({
+        success: true,
+        data: { lead, campaign: campaign ? { id: campaign.id, name: campaign.name } : null },
+      });
     },
   );
 }

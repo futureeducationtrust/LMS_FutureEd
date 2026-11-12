@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Upload,
   FileSpreadsheet,
@@ -18,7 +18,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { useAuthStore } from "@/store/auth";
 import { useNotifications } from "@/store/notifications";
-import { useCampaignNamePreview } from "@/hooks/useCampaigns";
+import {
+  useCampaignNamePreview,
+  useCampaign,
+  useWritableCampaignOptions,
+} from "@/hooks/useCampaigns";
 import Link from "next/link";
 import api from "@/lib/api";
 import { extractApiError } from "@/lib/utils";
@@ -64,6 +68,7 @@ type ImportResult = {
   }>;
   errors: Array<{ rowIndex: number; reason: string }>;
   campaign: { id: string; name: string } | null;
+  appended?: boolean; // leads were added to an existing campaign
 };
 
 type ImportCheck = {
@@ -314,8 +319,18 @@ async function parseExcelFile(file: File): Promise<ParsedRow[]> {
 }
 
 export default function ImportPage() {
+  // useSearchParams needs a Suspense boundary for static rendering.
+  return (
+    <Suspense fallback={null}>
+      <ImportPageInner />
+    </Suspense>
+  );
+}
+
+function ImportPageInner() {
   const { user } = useAuthStore();
   const router = useRouter();
+  const sp = useSearchParams();
   const { success, error } = useNotifications();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -333,6 +348,24 @@ export default function ImportPage() {
   // server versions a colliding name ("name (2)") — the preview shows that.
   const [campaignName, setCampaignName] = useState("");
   const namePreview = useCampaignNamePreview(campaignName.trim() || null);
+  // Target: a new campaign (named above) or an existing one. Opening
+  // /import?campaignId=... (from the Campaigns page) preselects "existing".
+  const urlCampaignId = sp.get("campaignId") ?? "";
+  const [target, setTarget] = useState<"new" | "existing">(urlCampaignId ? "existing" : "new");
+  const [targetCampaignId, setTargetCampaignId] = useState(urlCampaignId);
+  const isManager = !!user && user.role !== Role.EMPLOYEE;
+  const { data: campaignOptions = [], isLoading: optionsLoading } = useWritableCampaignOptions(isManager);
+  // The preselected campaign may be beyond the options page — fetch its name.
+  const { data: urlCampaign } = useCampaign(isManager && urlCampaignId ? urlCampaignId : null);
+  const campaignChoices =
+    urlCampaign && !urlCampaign.isArchived && !campaignOptions.some((c) => c.id === urlCampaign.id)
+      ? [{ id: urlCampaign.id, name: urlCampaign.name, leadCount: urlCampaign.leadCount }, ...campaignOptions]
+      : campaignOptions;
+  const appending = target === "existing" && !!targetCampaignId;
+  const targetCampaignName = campaignChoices.find((c) => c.id === targetCampaignId)?.name;
+  const targetPayload = appending
+    ? { campaignId: targetCampaignId }
+    : { campaignName: campaignName.trim() || undefined };
   const [courses, setCourses] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
 
@@ -375,7 +408,7 @@ export default function ImportPage() {
       const { data } = await api.post("/leads/import", {
         rows: parsedRows,
         fileName: file?.name,
-        campaignName: campaignName.trim() || undefined,
+        ...targetPayload,
         dryRun: true,
       });
       setCheck(data.data as ImportCheck);
@@ -396,7 +429,7 @@ export default function ImportPage() {
         rows: parsedRows,
         duplicateActions,
         fileName: file?.name,
-        campaignName: campaignName.trim() || undefined,
+        ...targetPayload,
       });
       setResult(data.data);
       setPreview(false);
@@ -404,7 +437,11 @@ export default function ImportPage() {
       const created = data.data.campaign as ImportResult["campaign"];
       success(
         `Import complete! ${data.data.imported.length} leads imported.`,
-        created ? `Campaign "${created.name}" created — assign it from Campaigns.` : undefined,
+        created
+          ? data.data.appended
+            ? `Added to campaign "${created.name}" — new leads are unassigned until you assign them.`
+            : `Campaign "${created.name}" created — assign it from Campaigns.`
+          : undefined,
       );
     } catch (e) {
       error("Import failed", extractApiError(e));
@@ -574,34 +611,88 @@ export default function ImportPage() {
             </button>
           </div>
 
-          {/* Campaign name — derived from the file, editable, versioned on collision */}
-          <div className="bg-white border border-surface-200 rounded-xl p-4">
-            <label htmlFor="campaign-name" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-              Campaign name
-            </label>
-            <input
-              id="campaign-name"
-              value={campaignName}
-              onChange={(e) => setCampaignName(e.target.value)}
-              maxLength={80}
-              className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
-              placeholder="Campaign name"
-            />
-            <p className="text-xs text-gray-500 mt-1.5">
-              {campaignName.trim() === "" ? (
-                "Leave blank to name the campaign after the file."
-              ) : namePreview.data?.resolved && namePreview.data.resolved !== campaignName.trim() ? (
-                <>
-                  A campaign called <strong>{campaignName.trim()}</strong> already exists — this import will be
-                  created as <strong className="text-primary">{namePreview.data.resolved}</strong>.
-                </>
-              ) : (
-                <>
-                  These leads will be grouped as campaign <strong>{campaignName.trim()}</strong>. They still appear in the
-                  main Leads list.
-                </>
-              )}
-            </p>
+          {/* Target campaign — a new one (named after the file, editable,
+              versioned on collision) or an existing one to append to */}
+          <div className="bg-white border border-surface-200 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Campaign</span>
+              <div className="flex rounded-lg border border-surface-200 overflow-hidden" role="radiogroup" aria-label="Campaign target">
+                {([
+                  ["new", "New campaign"],
+                  ["existing", "Add to existing"],
+                ] as const).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={target === v}
+                    onClick={() => setTarget(v)}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-medium",
+                      target === v ? "bg-primary text-white" : "bg-white text-gray-600 hover:bg-surface-50",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {target === "new" ? (
+              <>
+                <input
+                  id="campaign-name"
+                  aria-label="Campaign name"
+                  value={campaignName}
+                  onChange={(e) => setCampaignName(e.target.value)}
+                  maxLength={80}
+                  className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  placeholder="Campaign name"
+                />
+                <p className="text-xs text-gray-500">
+                  {campaignName.trim() === "" ? (
+                    "Leave blank to name the campaign after the file."
+                  ) : namePreview.data?.resolved && namePreview.data.resolved !== campaignName.trim() ? (
+                    <>
+                      A campaign called <strong>{campaignName.trim()}</strong> already exists — this import will be
+                      created as <strong className="text-primary">{namePreview.data.resolved}</strong>. To add to the
+                      existing one instead, choose <strong>Add to existing</strong>.
+                    </>
+                  ) : (
+                    <>
+                      These leads will be grouped as campaign <strong>{campaignName.trim()}</strong>. They still appear in the
+                      main Leads list.
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <select
+                  value={targetCampaignId}
+                  onChange={(e) => setTargetCampaignId(e.target.value)}
+                  aria-label="Existing campaign"
+                  className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">{optionsLoading ? "Loading campaigns…" : "Select a campaign"}</option>
+                  {campaignChoices.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.leadCount} leads)
+                    </option>
+                  ))}
+                </select>
+                <p className={cn("text-xs", appending ? "text-gray-500" : "text-amber-600")}>
+                  {appending ? (
+                    <>
+                      New leads from this file will be added to <strong>{targetCampaignName ?? "the selected campaign"}</strong>.
+                      They start unassigned — use <strong>Change assignees</strong> on the Campaigns page to hand them out.
+                    </>
+                  ) : (
+                    "Pick the campaign these leads should be added to."
+                  )}
+                </p>
+              </>
+            )}
           </div>
 
           {/* Stats */}
@@ -730,7 +821,7 @@ export default function ImportPage() {
             <Button
               onClick={() => void handleCheck()}
               loading={checking || importing}
-              disabled={validRows.length === 0}
+              disabled={validRows.length === 0 || (target === "existing" && !targetCampaignId)}
             >
               Import {validRows.length} Leads
             </Button>
@@ -752,7 +843,7 @@ export default function ImportPage() {
                 successfully.
                 {result.campaign && (
                   <>
-                    {" "}Grouped as campaign{" "}
+                    {result.appended ? " Added to campaign " : " Grouped as campaign "}
                     <Link href={`/campaigns?search=${encodeURIComponent(result.campaign.name)}&status=all`} className="font-semibold underline hover:text-green-900">
                       {result.campaign.name}
                     </Link>
@@ -834,7 +925,7 @@ export default function ImportPage() {
         <Modal
           open
           onClose={() => setCheck(null)}
-          title="No campaign created"
+          title={appending ? "Nothing to add" : "No campaign created"}
           footer={<Button onClick={() => setCheck(null)}>OK</Button>}
         >
           <div className="flex gap-3">
@@ -848,7 +939,7 @@ export default function ImportPage() {
               ) : (
                 <>This file has no valid new leads.</>
               )}{" "}
-              No leads were inserted and no campaign was created.
+              {appending ? "No leads were added to the campaign." : "No leads were inserted and no campaign was created."}
               {check.errorCount > 0 && (
                 <> <strong>{check.errorCount}</strong> rows had errors.</>
               )}
@@ -875,7 +966,11 @@ export default function ImportPage() {
           <div className="space-y-2 text-sm text-gray-700">
             <p>
               <strong>{check.newCount}</strong> new leads will be imported
-              {campaignName.trim() && (
+              {appending ? (
+                <>
+                  {" "}into existing campaign <strong>{targetCampaignName ?? "the selected campaign"}</strong>
+                </>
+              ) : campaignName.trim() && (
                 <>
                   {" "}into campaign <strong>{namePreview.data?.resolved ?? campaignName.trim()}</strong>
                 </>
@@ -901,7 +996,7 @@ export default function ImportPage() {
         <Modal
           open={summaryOpen}
           onClose={() => setSummaryOpen(false)}
-          title={result.campaign ? "Campaign created" : "Import complete"}
+          title={result.campaign ? (result.appended ? "Added to campaign" : "Campaign created") : "Import complete"}
           footer={<Button onClick={() => setSummaryOpen(false)}>OK</Button>}
         >
           <div className="space-y-2 text-sm text-gray-700">
@@ -909,7 +1004,7 @@ export default function ImportPage() {
               {result.campaign ? (
                 <>
                   In campaign <strong>{result.campaign.name}</strong>,{" "}
-                  <strong>{result.imported.length}</strong> leads were created.
+                  <strong>{result.imported.length}</strong> leads were {result.appended ? "added" : "created"}.
                 </>
               ) : (
                 <>

@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
+  Megaphone,
+  X,
   ChevronDown,
   ChevronRight,
   AlertTriangle,
@@ -18,7 +21,9 @@ import { useNotifications } from "@/store/notifications";
 import { useQuery } from "@tanstack/react-query";
 import { extractApiError } from "@/lib/utils";
 import { cn } from "@/lib/utils";
-import { Gender, MaritalStatus } from "@lms/types";
+import { Gender, MaritalStatus, Role } from "@lms/types";
+import { useAuthStore } from "@/store/auth";
+import { useCampaign, useWritableCampaignOptions } from "@/hooks/useCampaigns";
 
 const QUALIFICATIONS = [
   "TENTH",
@@ -36,8 +41,62 @@ const QUAL_LABELS: Record<string, string> = {
 };
 
 export default function NewLeadPage() {
+  // useSearchParams needs a Suspense boundary for static rendering.
+  return (
+    <Suspense fallback={null}>
+      <NewLeadPageInner />
+    </Suspense>
+  );
+}
+
+const EMPTY_FORM = {
+  phone: "",
+  studentName: "",
+  dateOfBirth: "",
+  fatherName: "",
+  gender: "",
+  maritalStatus: "",
+  courseIds: [] as string[],
+  sourceId: "",
+  sourceOther: "",
+  qualification: "",
+  schoolCollege: "",
+  boardUniversity: "",
+  passingYear: "",
+  percentage: "",
+  village: "",
+  sector: "",
+  city: "",
+  district: "",
+  state: "",
+  alternatePhone: "",
+  whatsappNumber: "",
+  email: "",
+  nextFollowUpAt: "",
+  sendEmail: false,
+};
+
+function NewLeadPageInner() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const { user } = useAuthStore();
+  const isManager = user?.role === Role.ADMIN || user?.role === Role.SUB_ADMIN;
   const { success, error } = useNotifications();
+
+  // Optional target campaign (managers only). /leads/new?campaignId=… comes
+  // from the Campaigns page; after each save the form resets so several
+  // leads can be added to the same campaign in a row.
+  const urlCampaignId = sp.get("campaignId") ?? "";
+  const [campaignId, setCampaignId] = useState(urlCampaignId);
+  const { data: campaignOptions = [] } = useWritableCampaignOptions(isManager);
+  const { data: urlCampaign } = useCampaign(isManager && urlCampaignId ? urlCampaignId : null);
+  const campaignChoices =
+    urlCampaign && !urlCampaign.isArchived && !campaignOptions.some((c) => c.id === urlCampaign.id)
+      ? [{ id: urlCampaign.id, name: urlCampaign.name }, ...campaignOptions]
+      : campaignOptions;
+  const activeCampaignId = isManager ? campaignId : "";
+  const campaignName = campaignChoices.find((c) => c.id === activeCampaignId)?.name;
+  const [addedCount, setAddedCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showCourse, setShowCourse] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -50,32 +109,7 @@ export default function NewLeadPage() {
     message: string;
   } | null>(null);
 
-  const [form, setForm] = useState({
-    phone: "",
-    studentName: "",
-    dateOfBirth: "",
-    fatherName: "",
-    gender: "",
-    maritalStatus: "",
-    courseIds: [] as string[],
-    sourceId: "",
-    sourceOther: "",
-    qualification: "",
-    schoolCollege: "",
-    boardUniversity: "",
-    passingYear: "",
-    percentage: "",
-    village: "",
-    sector: "",
-    city: "",
-    district: "",
-    state: "",
-    alternatePhone: "",
-    whatsappNumber: "",
-    email: "",
-    nextFollowUpAt: "",
-    sendEmail: false,
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [duplicateLead, setDuplicateLead] = useState<{
@@ -258,6 +292,7 @@ export default function NewLeadPage() {
       }
       payload["sendEmail"] = form.sendEmail;
       if (revivalConfirm) payload["confirmRevival"] = true;
+      if (activeCampaignId) payload["campaignId"] = activeCampaignId;
 
       const { data } = await api.post("/leads", payload);
       const result = data.data;
@@ -275,6 +310,16 @@ export default function NewLeadPage() {
           lostLeadId: result.lostLeadId,
           message: result.message,
         });
+        return;
+      }
+
+      if (result.campaign) {
+        // Stay on the form for the next lead in this campaign.
+        success("Lead added to campaign", `${form.studentName} → ${result.campaign.name}`);
+        setAddedCount((n) => n + 1);
+        setForm(EMPTY_FORM);
+        setErrors({});
+        window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
@@ -323,6 +368,66 @@ export default function NewLeadPage() {
           Fill in the student enquiry details
         </p>
       </div>
+
+      {/* Campaign target — managers only */}
+      {isManager && (
+        <div
+          className={cn(
+            "rounded-xl border p-4 space-y-2",
+            activeCampaignId ? "border-primary/30 bg-primary/5" : "border-surface-200 bg-white",
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <Megaphone size={15} className="text-primary shrink-0" />
+            <label htmlFor="lead-campaign" className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Add to campaign
+            </label>
+            <span className="text-xs text-gray-400">(optional)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              id="lead-campaign"
+              value={campaignId}
+              onChange={(e) => setCampaignId(e.target.value)}
+              className="flex-1 min-w-0 px-3 py-2.5 rounded-lg border border-surface-200 text-sm outline-none focus:border-primary bg-white"
+            >
+              <option value="">No campaign</option>
+              {campaignChoices.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            {activeCampaignId && (
+              <button
+                type="button"
+                onClick={() => setCampaignId("")}
+                className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white"
+                aria-label="Remove campaign"
+                title="Remove campaign"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {activeCampaignId && (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-gray-600">
+                The lead joins <strong>{campaignName ?? "this campaign"}</strong> unassigned; hand it out from the
+                campaign&apos;s <strong>Change assignees</strong>. The form clears after each save so you can add the next one.
+              </p>
+              {addedCount > 0 && (
+                <Link
+                  href={`/campaigns?search=${encodeURIComponent(campaignName ?? "")}&status=all`}
+                  className="text-xs font-semibold text-primary hover:underline whitespace-nowrap"
+                >
+                  {addedCount} added · Back to campaign →
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
         {/* Step 1 — Phone + duplicate gate */}
@@ -807,7 +912,7 @@ export default function NewLeadPage() {
                 Cancel
               </Button>
               <Button type="submit" loading={loading}>
-                Create Lead
+                {activeCampaignId ? "Add to Campaign" : "Create Lead"}
               </Button>
             </div>
           </>

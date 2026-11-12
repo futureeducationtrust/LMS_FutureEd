@@ -86,6 +86,9 @@ export const CreateLeadSchema = z.object({
   // Assignment — only used by admin/sub-admin (enforced in route)
   assignedToId: z.string().cuid().optional(),
 
+  // Add the new lead to an existing campaign — admin/sub-admin only (enforced in route)
+  campaignId: z.string().cuid().optional(),
+
   // Revival confirmation for LOST leads
   confirmRevival: z.boolean().optional(),
   revivalLeadId: z.string().cuid().optional(),
@@ -97,6 +100,7 @@ export const UpdateLeadSchema = CreateLeadSchema.omit({
   confirmRevival: true,
   revivalLeadId: true,
   assignedToId: true, // assignment is a separate endpoint
+  campaignId: true, // campaign is set on create / import only
 }).partial();
 
 // ── State Transition ──

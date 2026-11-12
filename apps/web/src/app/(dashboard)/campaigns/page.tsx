@@ -21,6 +21,8 @@ import {
   Layers,
   Clock,
   UserX,
+  Plus,
+  FileUp,
 } from "lucide-react";
 import { Role } from "@lms/types";
 import { useAuthStore } from "@/store/auth";
@@ -585,6 +587,13 @@ export default function CampaignsPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onSelect={() => setAssigning(c)}><UserPlus size={14} /> {c.assignees.length ? "Change assignees" : "Assign to team"}</DropdownMenuItem>
+                                {!c.isArchived && (
+                                  <>
+                                    <DropdownMenuItem onSelect={() => router.push(`/leads/new?campaignId=${c.id}`)}><Plus size={14} /> Add lead manually</DropdownMenuItem>
+                                    <DropdownMenuItem onSelect={() => router.push(`/import?campaignId=${c.id}`)}><FileUp size={14} /> Upload Excel to this campaign</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                  </>
+                                )}
                                 <DropdownMenuItem onSelect={() => setRenaming(c)}><Pencil size={14} /> Rename</DropdownMenuItem>
                                 <DropdownMenuItem onSelect={() => router.push(`/leads?campaignId=${c.id}`)}><Users size={14} /> View leads in Leads</DropdownMenuItem>
                                 <DropdownMenuSeparator />
