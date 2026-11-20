@@ -215,9 +215,81 @@ const COLUMN_MAP: Record<string, string> = {
   note: "remarks",
   comment: "remarks",
   comments: "remarks",
+
+  // Extra aliases (Meta / Google exports and hand-made sheets)
+  "full name": "studentName",
+  "student s name": "studentName",
+  "lead name": "studentName",
+  "phone number": "phone",
+  "phone no": "phone",
+  "mobile num": "phone",
+  "contact number": "phone",
+  "primary phone": "phone",
+  "alternate number": "alternatePhone",
+  "alternate no": "alternatePhone",
+  "alt number": "alternatePhone",
+  "alt no": "alternatePhone",
+  "alt mobile": "alternatePhone",
+  "alternate contact": "alternatePhone",
+  "secondary phone": "alternatePhone",
+  "parent phone": "alternatePhone",
+  "parents phone": "alternatePhone",
+  "father phone": "alternatePhone",
+  "father mobile": "alternatePhone",
+  "whatsapp num": "whatsappNumber",
+  "father s name": "fatherName",
+  "fathers name": "fatherName",
+  "guardian name": "fatherName",
+  "parent name": "fatherName",
+  "city district": "city",
+  "town": "city",
+  "location": "city",
+  "highest qualification": "qualification",
+  "education": "qualification",
+  "school name": "schoolCollege",
+  "college name": "schoolCollege",
+  "institute": "schoolCollege",
+  "board university": "boardUniversity",
+  "year of passing": "passingYear",
+  "passout year": "passingYear",
+  "pass out year": "passingYear",
+  "passing out year": "passingYear",
+  "percent": "percentage",
+  "marks percentage": "percentage",
+  "pcm pcb": "pcmPcbPercentage",
+  "pcm pcb percentage": "pcmPcbPercentage",
+  "source name": "source",
+  "lead source name": "source",
+  "campaign": "source",
+  "campaign name": "source",
+  "interested course": "course",
+  "course interested": "course",
 };
 
-async function parseExcelFile(file: File): Promise<ParsedRow[]> {
+// Header text → lookup key: lowercase, drop "*", ":", ".", quotes, "%"→kept,
+// treat "_", "-", "/", "'" as spaces, collapse whitespace. So "Father's Name*",
+// "FATHER_NAME", "City / District" and "Phone Number:" all match.
+function normHeader(h: unknown): string {
+  return String(h ?? "")
+    .toLowerCase()
+    .replace(/[  -​　]/g, " ")
+    .replace(/[*:.()"‘’“”]/g, "")
+    .replace(/['_\-\/\\]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+const NORM_COLUMN_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(COLUMN_MAP).map(([k, v]) => [normHeader(k), v]),
+);
+function mapHeader(h: unknown): string | undefined {
+  const key = normHeader(h);
+  if (!key) return undefined;
+  return NORM_COLUMN_MAP[key] ?? NORM_COLUMN_MAP[key.replace(/\s/g, "")];
+}
+
+export type ParseResult = { rows: ParsedRow[]; unmapped: string[] };
+
+async function parseExcelFile(file: File): Promise<ParseResult> {
   const XLSX = await loadXlsx();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -226,26 +298,54 @@ async function parseExcelFile(file: File): Promise<ParsedRow[]> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]!]!;
+        // raw:false → cells come back as the text Excel shows, so dates
+        // read "01/05/2026" instead of the serial number 46144.
         const raw = XLSX.utils.sheet_to_json(sheet, {
           header: 1,
+          raw: false,
+          defval: "",
+          dateNF: "yyyy-mm-dd",
         }) as string[][];
 
-        if (raw.length < 2) {
-          resolve([]);
+        // The header row is not always row 1 (title/banner rows above it):
+        // pick the row among the first 10 that matches the most known columns.
+        let headerIdx = 0;
+        let best = -1;
+        for (let r = 0; r < Math.min(10, raw.length); r++) {
+          const hits = (raw[r] ?? []).filter((h) => mapHeader(h)).length;
+          if (hits > best) { best = hits; headerIdx = r; }
+        }
+
+        if (raw.length < headerIdx + 2) {
+          resolve({ rows: [], unmapped: [] });
           return;
         }
 
-        const headers = raw[0]!.map((h) => String(h).trim().toLowerCase());
+        const headerCells = raw[headerIdx]!;
+        const mappedCols = headerCells.map((h) => mapHeader(h));
+        const unmapped = headerCells
+          .filter((h, j) => String(h ?? "").trim() && !mappedCols[j])
+          .map((h) => String(h).trim());
         const rows: ParsedRow[] = [];
 
-        for (let i = 1; i < raw.length; i++) {
+        for (let i = headerIdx + 1; i < raw.length; i++) {
           const row = raw[i]!;
           const parsed: Record<string, unknown> = { rowIndex: i };
 
-          headers.forEach((header, j) => {
-            const mapped = COLUMN_MAP[header];
-            if (mapped) parsed[mapped] = row[j] ? String(row[j]).trim() : null;
+          mappedCols.forEach((mapped, j) => {
+            if (!mapped) return;
+            const v = row[j] != null ? String(row[j]).trim() : "";
+            // First non-empty column wins when two headers map to one field.
+            if (v && !parsed[mapped]) parsed[mapped] = v;
+            else if (!(mapped in parsed)) parsed[mapped] = null;
           });
+
+          // Numeric fields: "75%", "2,024", "75.5 %" → plain number text, else drop.
+          for (const k of ["percentage", "pcmPcbPercentage", "passingYear"]) {
+            if (!parsed[k]) continue;
+            const m = String(parsed[k]).replace(/,/g, "").match(/\d+(\.\d+)?/);
+            parsed[k] = m ? m[0] : null;
+          }
 
           if (parsed["phone"]) {
             const cleaned = String(parsed["phone"])
@@ -309,7 +409,7 @@ async function parseExcelFile(file: File): Promise<ParsedRow[]> {
           rows.push(parsed as ParsedRow);
         }
 
-        resolve(rows);
+        resolve({ rows, unmapped });
       } catch (err) {
         reject(err);
       }
@@ -337,6 +437,8 @@ function ImportPageInner() {
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [preview, setPreview] = useState(false);
+  // Excel headers that matched no lead field — shown so data isn't lost silently.
+  const [unmappedCols, setUnmappedCols] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   // Pre-import duplicate check → confirm popup; then a summary popup.
@@ -397,8 +499,9 @@ function ImportPageInner() {
     setParsedRows([]);
     setCampaignName(deriveCampaignNameClient(f.name));
     try {
-      const rows = await parseExcelFile(f);
+      const { rows, unmapped } = await parseExcelFile(f);
       setParsedRows(rows);
+      setUnmappedCols(unmapped);
       setPreview(true);
     } catch {
       error(
@@ -490,6 +593,16 @@ function ImportPageInner() {
 
   const validRows = parsedRows.filter((r) => r.phone && r.studentName);
   const invalidRows = parsedRows.filter((r) => !r.phone || !r.studentName);
+  // Source values the server can't match to a saved source are dropped —
+  // warn before import (same loose match as the API: case/space/_/- insensitive, contains).
+  const normSrc = (s: string) => s.toLowerCase().replace(/[_\-]+/g, " ").replace(/\s+/g, " ").trim();
+  const knownSources = sources.map(normSrc);
+  const unknownSources = sources.length
+    ? [...new Set(validRows.map((r) => r.source?.trim()).filter((s): s is string => !!s))].filter((s) => {
+        const k = normSrc(s);
+        return !knownSources.some((d) => d === k || d.includes(k) || k.includes(d));
+      })
+    : [];
 
   if (!user || user.role === Role.EMPLOYEE) return null;
 
@@ -730,6 +843,26 @@ function ImportPageInner() {
               </div>
             ))}
           </div>
+
+          {preview && unmappedCols.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold">
+                {unmappedCols.length} column{unmappedCols.length > 1 ? "s" : ""} not recognised — this data will NOT be imported:
+              </p>
+              <p className="mt-1">{unmappedCols.map((c) => `"${c}"`).join(", ")}</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Rename the header to match the template (e.g. father name, city, qualification, source) and re-upload.
+              </p>
+            </div>
+          )}
+
+          {preview && unknownSources.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+              <p className="font-semibold">Source not found in Settings → Sources — it will be left blank:</p>
+              <p className="mt-1">{unknownSources.map((c) => `"${c}"`).join(", ")}</p>
+              <p className="mt-1 text-xs text-amber-700">Add the source in Settings first, or use one of the names listed above.</p>
+            </div>
+          )}
 
           {/* Preview table */}
           {preview && validRows.length > 0 && (
