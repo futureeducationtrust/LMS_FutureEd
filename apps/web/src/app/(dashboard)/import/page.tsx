@@ -247,6 +247,10 @@ const COLUMN_MAP: Record<string, string> = {
   "highest qualification": "qualification",
   "education": "qualification",
   "school name": "schoolCollege",
+  "school college name": "schoolCollege",
+  "board university name": "boardUniversity",
+  "course name interested": "course",
+  "pcm pcb %": "pcmPcbPercentage",
   "college name": "schoolCollege",
   "institute": "schoolCollege",
   "board university": "boardUniversity",
@@ -273,7 +277,7 @@ function normHeader(h: unknown): string {
   return String(h ?? "")
     .toLowerCase()
     .replace(/[  -​　]/g, " ")
-    .replace(/[*:.()"‘’“”]/g, "")
+    .replace(/[*:.()%#"‘’“”]/g, "")
     .replace(/['_\-\/\\]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -296,16 +300,37 @@ async function parseExcelFile(file: File): Promise<ParseResult> {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
+        // cellNF keeps each cell's number format so dates/% can be detected.
+        // (Not cellDates: SheetJS shifts dates a day back in IST.)
+        const workbook = XLSX.read(data, { type: "array", cellNF: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]!]!;
-        // raw:false → cells come back as the text Excel shows, so dates
-        // read "01/05/2026" instead of the serial number 46144.
-        const raw = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-          raw: false,
-          defval: "",
-          dateNF: "yyyy-mm-dd",
-        }) as string[][];
+        // Cell → text by type: date cells become yyyy-mm-dd (not the serial
+        // 46144), numbers keep full precision (not 9.19E+11), % cells ×100.
+        const p2 = (n: number) => String(n).padStart(2, "0");
+        const cellText = (c: any): string => {
+          if (!c || c.v == null) return "";
+          if (c.t === "n" && typeof c.z === "string" && XLSX.SSF.is_date(c.z)) {
+            const d = XLSX.SSF.parse_date_code(c.v);
+            if (d) return `${d.y}-${p2(d.m)}-${p2(d.d)}`;
+          }
+          if (c.t === "n") {
+            const isPct = (typeof c.z === "string" && c.z.includes("%")) || String(c.w ?? "").trim().endsWith("%");
+            const n = isPct ? c.v * 100 : c.v;
+            return Number.isInteger(n) ? n.toFixed(0) : String(Math.round(n * 100) / 100);
+          }
+          return String(c.w ?? c.v);
+        };
+        const raw: string[][] = [];
+        if (sheet["!ref"]) {
+          const range = XLSX.utils.decode_range(sheet["!ref"]);
+          for (let R = range.s.r; R <= range.e.r; R++) {
+            const line: string[] = [];
+            for (let C = range.s.c; C <= range.e.c; C++) {
+              line.push(cellText(sheet[XLSX.utils.encode_cell({ r: R, c: C })]));
+            }
+            raw.push(line);
+          }
+        }
 
         // The header row is not always row 1 (title/banner rows above it):
         // pick the row among the first 10 that matches the most known columns.
@@ -339,6 +364,24 @@ async function parseExcelFile(file: File): Promise<ParseResult> {
             if (v && !parsed[mapped]) parsed[mapped] = v;
             else if (!(mapped in parsed)) parsed[mapped] = null;
           });
+
+          // DOB typed as text: dd/mm/yyyy, dd-mm-yy, dd.mm.yyyy (Indian order)
+          // → yyyy-mm-dd. Anything still unparseable is dropped so the API's
+          // new Date() never gets an invalid date.
+          if (parsed["dateOfBirth"]) {
+            const s = String(parsed["dateOfBirth"]).trim();
+            const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/);
+            let iso: string | null = /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+            if (m) {
+              const dd = Number(m[1]), mm = Number(m[2]);
+              let yy = Number(m[3]);
+              if (yy < 100) yy += yy > new Date().getFullYear() % 100 ? 1900 : 2000;
+              if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
+                iso = `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+              }
+            }
+            parsed["dateOfBirth"] = iso && !isNaN(new Date(iso).getTime()) ? iso : null;
+          }
 
           // Numeric fields: "75%", "2,024", "75.5 %" → plain number text, else drop.
           for (const k of ["percentage", "pcmPcbPercentage", "passingYear"]) {
