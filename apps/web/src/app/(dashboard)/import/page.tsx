@@ -370,12 +370,19 @@ function ImportPageInner() {
   const [sources, setSources] = useState<string[]>([]);
 
   useEffect(() => {
-    api.get("/settings/courses?isActive=true").then(({ data }) => {
-      setCourses((data.data as any[]).map((c: any) => c.name));
-    }).catch(() => {});
-    api.get("/settings/sources").then(({ data }) => {
-      setSources((data.data as any[]).filter((s: any) => s.isActive).map((s: any) => s.name));
-    }).catch(() => {});
+    // Refetch when the tab regains focus, so a source/course added in
+    // Settings in another tab shows up here without a page reload.
+    const load = () => {
+      api.get("/settings/courses?isActive=true").then(({ data }) => {
+        setCourses((data.data as any[]).map((c: any) => c.name));
+      }).catch(() => {});
+      api.get("/settings/sources").then(({ data }) => {
+        setSources((data.data as any[]).filter((s: any) => s.isActive).map((s: any) => s.name));
+      }).catch(() => {});
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
 
   useEffect(() => {

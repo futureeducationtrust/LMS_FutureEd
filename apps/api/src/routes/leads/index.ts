@@ -719,30 +719,39 @@ export async function leadRoutes(fastify: FastifyInstance): Promise<void> {
           select: { id: true, name: true },
         }),
       ]);
-      const courseMap = new Map(
-        allCourses.map((c) => [c.name.toLowerCase().trim(), c.id]),
-      );
-      const sourceMap = new Map(
-        allSources.map((s) => [s.name.toLowerCase().trim(), s.id]),
-      );
+      // Names are compared after normalising case, non-breaking spaces,
+      // underscores/hyphens and repeated whitespace, so "META BED_NOV 26_CAMPAIGN"
+      // in Excel matches the saved source even if the spacing differs.
+      const normName = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[  -​ 　]/g, " ")
+          .replace(/[_\-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      // Longest names first so the contains-fallback picks the most specific
+      // match ("meta bed nov 26 campaign" before a plain "meta").
+      const byLongest = <T extends { name: string; id: string }>(xs: T[]) =>
+        new Map(
+          xs
+            .map((x) => [normName(x.name), x.id] as const)
+            .sort((a, b) => b[0].length - a[0].length),
+        );
+      const courseMap = byLongest(allCourses);
+      const sourceMap = byLongest(allSources);
 
-      // Fuzzy lookup: exact first, then contains fallback
-      function resolveCourseId(name: string): string | undefined {
-        const key = name.toLowerCase().trim();
-        if (courseMap.has(key)) return courseMap.get(key);
-        for (const [dbName, id] of courseMap.entries()) {
+      // Fuzzy lookup: exact first, then contains fallback (most specific wins)
+      function resolveFrom(map: Map<string, string>, name: string): string | undefined {
+        const key = normName(name);
+        if (!key) return undefined;
+        if (map.has(key)) return map.get(key);
+        for (const [dbName, id] of map.entries()) {
           if (dbName.includes(key) || key.includes(dbName)) return id;
         }
         return undefined;
       }
-      function resolveSourceId(name: string): string | undefined {
-        const key = name.toLowerCase().trim();
-        if (sourceMap.has(key)) return sourceMap.get(key);
-        for (const [dbName, id] of sourceMap.entries()) {
-          if (dbName.includes(key) || key.includes(dbName)) return id;
-        }
-        return undefined;
-      }
+      const resolveCourseId = (name: string) => resolveFrom(courseMap, name);
+      const resolveSourceId = (name: string) => resolveFrom(sourceMap, name);
 
       // Normalize phones before duplicate check so +91/scientific-notation phones match
       const normalizedRows = rows.map((r) => ({
